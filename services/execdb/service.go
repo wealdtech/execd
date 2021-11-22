@@ -52,6 +52,12 @@ type EventsSetter interface {
 	SetEvents(ctx context.Context, events []*Event) error
 }
 
+// TransactionsProvider defines functions to provide transaction information.
+type TransactionsProvider interface {
+	// Transactions returns transactions matching the supplied filter.
+	Transactions(ctx context.Context, filter *TransactionFilter) ([]*Transaction, error)
+}
+
 // TransactionsSetter defines functions to create and update transactions.
 type TransactionsSetter interface {
 	Service

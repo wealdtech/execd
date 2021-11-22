@@ -51,8 +51,14 @@ func (s *Service) SetBlocks(ctx context.Context, blocks []*execdb.Block) error {
 			"f_state_root",
 			"f_timestamp",
 			"f_total_difficulty",
+			"f_issuance",
 		},
 		pgx.CopyFromSlice(len(blocks), func(i int) ([]interface{}, error) {
+			var issuance *decimal.Decimal
+			if blocks[i].Issuance != nil {
+				tmp := decimal.NewFromBigInt(blocks[i].Issuance, 0)
+				issuance = &tmp
+			}
 			return []interface{}{
 				blocks[i].Height,
 				blocks[i].Hash,
@@ -67,6 +73,7 @@ func (s *Service) SetBlocks(ctx context.Context, blocks []*execdb.Block) error {
 				blocks[i].StateRoot,
 				blocks[i].Timestamp,
 				decimal.NewFromBigInt(blocks[i].TotalDifficulty, 0),
+				issuance,
 			}, nil
 		}))
 

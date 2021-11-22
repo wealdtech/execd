@@ -4,7 +4,7 @@ go 1.16
 
 require (
 	github.com/attestantio/go-eth2-client v0.8.0
-	github.com/attestantio/go-execution-client v0.2.0
+	github.com/attestantio/go-execution-client v0.2.2
 	github.com/jackc/pgtype v1.6.2
 	github.com/jackc/pgx/v4 v4.10.1
 	github.com/mitchellh/go-homedir v1.1.0

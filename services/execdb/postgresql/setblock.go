@@ -32,6 +32,11 @@ func (s *Service) SetBlock(ctx context.Context, block *execdb.Block) error {
 		return ErrNoTransaction
 	}
 
+	var issuance *decimal.Decimal
+	if block.Issuance != nil {
+		tmp := decimal.NewFromBigInt(block.Issuance, 0)
+		issuance = &tmp
+	}
 	_, err := tx.Exec(ctx, `
 INSERT INTO t_blocks(f_height
                     ,f_hash
@@ -46,8 +51,9 @@ INSERT INTO t_blocks(f_height
                     ,f_state_root
                     ,f_timestamp
                     ,f_total_difficulty
+                    ,f_issuance
                     )
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
 ON CONFLICT (f_hash) DO
 UPDATE
 SET f_height = excluded.f_height
@@ -76,6 +82,7 @@ SET f_height = excluded.f_height
 		block.StateRoot,
 		block.Timestamp,
 		decimal.NewFromBigInt(block.TotalDifficulty, 0),
+		issuance,
 	)
 
 	return err

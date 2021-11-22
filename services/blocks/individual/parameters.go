@@ -28,6 +28,7 @@ type parameters struct {
 	chainHeightProvider         execclient.ChainHeightProvider
 	blocksProvider              execclient.BlocksProvider
 	blockReplaysProvider        execclient.BlockReplaysProvider
+	issuanceProvider            execclient.IssuanceProvider
 	transactionReceiptsProvider execclient.TransactionReceiptsProvider
 	blocksSetter                execdb.BlocksSetter
 	transactionsSetter          execdb.TransactionsSetter
@@ -37,6 +38,7 @@ type parameters struct {
 	enableTransactions          bool
 	enableTransactionEvents     bool
 	enableBalanceChanges        bool
+	enableStorageChanges        bool
 }
 
 // Parameter is the interface for service parameters.
@@ -82,6 +84,13 @@ func WithBlocksProvider(provider execclient.BlocksProvider) Parameter {
 func WithBlockReplaysProvider(provider execclient.BlockReplaysProvider) Parameter {
 	return parameterFunc(func(p *parameters) {
 		p.blockReplaysProvider = provider
+	})
+}
+
+// WithIssuanceProvider sets the issuance provider for this module.
+func WithIssuanceProvider(provider execclient.IssuanceProvider) Parameter {
+	return parameterFunc(func(p *parameters) {
+		p.issuanceProvider = provider
 	})
 }
 
@@ -148,6 +157,13 @@ func WithBalanceChanges(enable bool) Parameter {
 	})
 }
 
+// WithStorageChanges sets the storage of storage change data.
+func WithStorageChanges(enable bool) Parameter {
+	return parameterFunc(func(p *parameters) {
+		p.enableStorageChanges = enable
+	})
+}
+
 // parseAndCheckParameters parses and checks parameters to ensure that mandatory parameters are present and correct.
 func parseAndCheckParameters(params ...Parameter) (*parameters, error) {
 	parameters := parameters{
@@ -169,6 +185,7 @@ func parseAndCheckParameters(params ...Parameter) (*parameters, error) {
 	if parameters.blockReplaysProvider == nil {
 		return nil, errors.New("no block replays provider specified")
 	}
+	// Issuance provider is allowed to be nil.
 	if parameters.transactionReceiptsProvider == nil {
 		return nil, errors.New("no transaction receipts provider specified")
 	}

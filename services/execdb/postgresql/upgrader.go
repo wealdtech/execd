@@ -236,10 +236,10 @@ CREATE TABLE t_blocks (
  ,f_state_root       BYTEA NOT NULL
  ,f_timestamp        TIMESTAMPTZ NOT NULL
  ,f_total_difficulty NUMERIC NOT NULL
+ ,f_issuance         NUMERIC
 );
 CREATE UNIQUE INDEX i_blocks_1 ON t_blocks(f_height,f_hash);
 CREATE UNIQUE INDEX i_blocks_2 ON t_blocks(f_hash);
-CREATE INDEX i_blocks_3 ON t_blocks(f_hash);
 
 -- t_transasctions contains execution layer transactions.
 CREATE TABLE t_transactions (
@@ -266,29 +266,44 @@ CREATE TABLE t_transactions (
 CREATE UNIQUE INDEX i_transactions_1 ON t_transactions(f_block_hash,f_index);
 CREATE INDEX i_transactions_2 ON t_transactions(f_from);
 CREATE INDEX i_transactions_3 ON t_transactions(f_to);
+CREATE INDEX i_transactions_4 ON t_transactions(f_block_height);
 
 -- t_transaction_balance_changes contains balance changes as a result of a transaction.
 CREATE TABLE t_transaction_balance_changes (
-  f_transaction_hash         BYTEA NOT NULL
- ,f_block_height             INTEGER NOT NULL
- ,f_address                  BYTEA NOT NULL
- ,f_old                      NUMERIC NOT NULL
- ,f_new                      NUMERIC NOT NULL
+  f_transaction_hash BYTEA NOT NULL
+ ,f_block_height     INTEGER NOT NULL
+ ,f_address          BYTEA NOT NULL
+ ,f_old              NUMERIC NOT NULL
+ ,f_new              NUMERIC NOT NULL
 );
 CREATE UNIQUE INDEX i_transaction_balance_changes_1 ON t_transaction_balance_changes(f_transaction_hash,f_block_height,f_address);
-CREATE INDEX i_transaction_balance_changes_2 ON t_transaction_balance_changes(f_address,f_block_height);
+CREATE INDEX i_transaction_balance_changes_2 ON t_transaction_balance_changes(f_address);
+CREATE INDEX i_transaction_balance_changes_3 ON t_transaction_balance_changes(f_block_height);
+
+-- t_transaction_storage_changes contains storage changes as a result of a transaction.
+CREATE TABLE t_transaction_storage_changes (
+  f_transaction_hash BYTEA NOT NULL
+ ,f_block_height     INTEGER NOT NULL
+ ,f_address          BYTEA NOT NULL
+ ,f_storage_address  BYTEA NOT NULL
+ ,f_value            BYTEA NOT NULL
+);
+CREATE UNIQUE INDEX i_transaction_storage_changes_1 ON t_transaction_storage_changes(f_transaction_hash,f_address,f_storage_address);
+CREATE INDEX i_transaction_storage_changes_2 ON t_transaction_storage_changes(f_address);
+CREATE INDEX i_transaction_storage_changes_3 ON t_transaction_storage_changes(f_block_height);
 
 -- t_events contains execution layer events.
 CREATE TABLE t_events (
-  f_transaction_hash         BYTEA NOT NULL
- ,f_block_height             INTEGER NOT NULL
- ,f_index                    INTEGER NOT NULL
- ,f_address                  BYTEA NOT NULL
- ,f_topics                   BYTEA[] NOT NULL
- ,f_data                     BYTEA
+  f_transaction_hash BYTEA NOT NULL
+ ,f_block_height     INTEGER NOT NULL
+ ,f_index            INTEGER NOT NULL
+ ,f_address          BYTEA NOT NULL
+ ,f_topics           BYTEA[] NOT NULL
+ ,f_data             BYTEA
 );
 CREATE UNIQUE INDEX i_events_1 ON t_events(f_transaction_hash,f_block_height,f_index);
 CREATE INDEX i_events_2 ON t_events(f_address);
+CREATE INDEX i_events_3 ON t_events(f_block_height);
 `); err != nil {
 		cancel()
 		return errors.Wrap(err, "failed to create initial tables")

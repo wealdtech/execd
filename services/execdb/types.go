@@ -33,6 +33,7 @@ type Block struct {
 	StateRoot       []byte
 	Timestamp       time.Time
 	TotalDifficulty *big.Int
+	Issuance        *big.Int
 }
 
 // Transaction holds information about a transaction.
@@ -62,6 +63,7 @@ type Transaction struct {
 // TransactionStateDiff holds information about state differences as a result of a transaction.
 type TransactionStateDiff struct {
 	BalanceChanges []*TransactionBalanceChange
+	StorageChanges []*TransactionStorageChange
 }
 
 // TransactionBalanceChange holds information about a balance change as a result of a transaction.
@@ -71,6 +73,15 @@ type TransactionBalanceChange struct {
 	Address         []byte
 	Old             *big.Int
 	New             *big.Int
+}
+
+// TransactionStorageChange holds information about a storage change as a result of a transaction.
+type TransactionStorageChange struct {
+	TransactionHash []byte
+	BlockHeight     uint32
+	Address         []byte
+	StorageAddress  []byte
+	Value           []byte
 }
 
 // Event holds information about a transaction event.

@@ -28,6 +28,7 @@ type parameters struct {
 	chainHeightProvider         execclient.ChainHeightProvider
 	blocksProvider              execclient.BlocksProvider
 	blockReplaysProvider        execclient.BlockReplaysProvider
+	issuanceProvider            execclient.IssuanceProvider
 	transactionReceiptsProvider execclient.TransactionReceiptsProvider
 	blocksSetter                execdb.BlocksSetter
 	transactionsSetter          execdb.TransactionsSetter
@@ -37,6 +38,7 @@ type parameters struct {
 	enableTransactions          bool
 	enableTransactionEvents     bool
 	enableBalanceChanges        bool
+	enableStorageChanges        bool
 	processConcurrency          int64
 }
 
@@ -83,6 +85,13 @@ func WithBlocksProvider(provider execclient.BlocksProvider) Parameter {
 func WithBlockReplaysProvider(provider execclient.BlockReplaysProvider) Parameter {
 	return parameterFunc(func(p *parameters) {
 		p.blockReplaysProvider = provider
+	})
+}
+
+// WithIssuanceProvider sets the issuance provider for this module.
+func WithIssuanceProvider(provider execclient.IssuanceProvider) Parameter {
+	return parameterFunc(func(p *parameters) {
+		p.issuanceProvider = provider
 	})
 }
 
@@ -149,6 +158,13 @@ func WithBalanceChanges(enable bool) Parameter {
 	})
 }
 
+// WithStorageChanges sets the storage of storage change data.
+func WithStorageChanges(enable bool) Parameter {
+	return parameterFunc(func(p *parameters) {
+		p.enableStorageChanges = enable
+	})
+}
+
 // WithProcessConcurrency sets the concurrency for the service.
 func WithProcessConcurrency(concurrency int64) Parameter {
 	return parameterFunc(func(p *parameters) {
@@ -177,6 +193,7 @@ func parseAndCheckParameters(params ...Parameter) (*parameters, error) {
 	if parameters.blockReplaysProvider == nil {
 		return nil, errors.New("no block replays provider specified")
 	}
+	// Issuance provider is allowed to be nil.
 	if parameters.transactionReceiptsProvider == nil {
 		return nil, errors.New("no transaction receipts provider specified")
 	}

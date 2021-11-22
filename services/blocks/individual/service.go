@@ -33,6 +33,7 @@ type Service struct {
 	chainHeightProvider         execclient.ChainHeightProvider
 	blocksProvider              execclient.BlocksProvider
 	blockReplaysProvider        execclient.BlockReplaysProvider
+	issuanceProvider            execclient.IssuanceProvider
 	transactionReceiptsProvider execclient.TransactionReceiptsProvider
 	blocksSetter                execdb.BlocksSetter
 	transactionsSetter          execdb.TransactionsSetter
@@ -42,6 +43,7 @@ type Service struct {
 	enableTransactions          bool
 	enableTransactionEvents     bool
 	enableBalanceChanges        bool
+	enableStorageChanges        bool
 }
 
 // module-wide log.
@@ -65,6 +67,7 @@ func New(ctx context.Context, params ...Parameter) (*Service, error) {
 		chainHeightProvider:         parameters.chainHeightProvider,
 		blocksProvider:              parameters.blocksProvider,
 		blockReplaysProvider:        parameters.blockReplaysProvider,
+		issuanceProvider:            parameters.issuanceProvider,
 		transactionReceiptsProvider: parameters.transactionReceiptsProvider,
 		blocksSetter:                parameters.blocksSetter,
 		transactionsSetter:          parameters.transactionsSetter,
@@ -74,6 +77,7 @@ func New(ctx context.Context, params ...Parameter) (*Service, error) {
 		enableTransactions:          parameters.enableTransactions,
 		enableTransactionEvents:     parameters.enableTransactionEvents,
 		enableBalanceChanges:        parameters.enableBalanceChanges,
+		enableStorageChanges:        parameters.enableStorageChanges,
 	}
 
 	// Update to current block before starting (in the background).
@@ -161,6 +165,18 @@ func (s *Service) handleBlock(ctx context.Context,
 		Timestamp:       block.London.Timestamp,
 		TotalDifficulty: block.London.TotalDifficulty,
 	}
+
+	log.Warn().Msg(fmt.Sprintf("1 - %v", s.issuanceProvider != nil))
+	if s.issuanceProvider != nil {
+		log.Warn().Msg("2")
+		issuance, err := s.issuanceProvider.Issuance(ctx, fmt.Sprintf("%d", block.London.Number))
+		if err != nil {
+			return err
+		}
+		log.Warn().Str("issuance", fmt.Sprintf("%v", issuance)).Msg("3")
+		dbBlock.Issuance = issuance.Issuance
+	}
+
 	if err := s.blocksSetter.SetBlock(ctx, dbBlock); err != nil {
 		cancel()
 		return errors.Wrap(err, "failed to set block")
@@ -228,7 +244,7 @@ func (s *Service) handleBlockTransactions(ctx context.Context,
 		}
 	}
 
-	if s.enableBalanceChanges {
+	if s.enableBalanceChanges || s.enableStorageChanges {
 		transactionsResults, err := s.blockReplaysProvider.ReplayBlockTransactions(ctx, fmt.Sprintf("%d", block.London.Number))
 		if err != nil {
 			return errors.Wrap(err, "failed to replay block")
@@ -241,22 +257,37 @@ func (s *Service) handleBlockTransactions(ctx context.Context,
 				BalanceChanges: make([]*execdb.TransactionBalanceChange, 0, len(transactionResults.StateDiff)),
 			}
 			for key, stateDiff := range transactionResults.StateDiff {
-				if stateDiff.Balance == nil {
-					// Only doing balance changes for now.
-					continue
-				}
 				address, err := hex.DecodeString(strings.TrimPrefix(key, "0x"))
 				if err != nil {
-					return errors.Wrap(err, "invalid balance change address")
+					return errors.Wrap(err, "invalid state diff address")
 				}
-				dbBalanceChange := &execdb.TransactionBalanceChange{
-					TransactionHash: transactionResults.TransactionHash,
-					BlockHeight:     block.London.Number,
-					Address:         address,
-					Old:             stateDiff.Balance.From,
-					New:             stateDiff.Balance.To,
+				if stateDiff.Balance != nil {
+					dbBalanceChange := &execdb.TransactionBalanceChange{
+						TransactionHash: transactionResults.TransactionHash,
+						BlockHeight:     block.London.Number,
+						Address:         address,
+						Old:             stateDiff.Balance.From,
+						New:             stateDiff.Balance.To,
+					}
+					dbStateDiff.BalanceChanges = append(dbStateDiff.BalanceChanges, dbBalanceChange)
 				}
-				dbStateDiff.BalanceChanges = append(dbStateDiff.BalanceChanges, dbBalanceChange)
+
+				if stateDiff.Storage != nil {
+					for storageHashStr, stateChange := range stateDiff.Storage {
+						storageHash, err := hex.DecodeString(strings.TrimPrefix(storageHashStr, "0x"))
+						if err != nil {
+							return errors.Wrap(err, "invalid storage change storage hash")
+						}
+						dbStorageChange := &execdb.TransactionStorageChange{
+							TransactionHash: transactionResults.TransactionHash,
+							BlockHeight:     block.London.Number,
+							Address:         address,
+							StorageAddress:  storageHash,
+							Value:           stateChange.To,
+						}
+						dbStateDiff.StorageChanges = append(dbStateDiff.StorageChanges, dbStorageChange)
+					}
+				}
 			}
 			dbStateDiffs = append(dbStateDiffs, dbStateDiff)
 		}

@@ -38,7 +38,7 @@ func (s *Service) SetTransactionStateDiffs(ctx context.Context, stateDiffs []*ex
 	// Create a savepoint in case the copy fails.
 	nestedTx, err := tx.Begin(ctx)
 	if err != nil {
-		return errors.Wrap(err, "failed to create nested transaction")
+		return errors.Wrap(err, "failed to create balance nested transaction")
 	}
 
 	_, err = nestedTx.CopyFrom(ctx,
@@ -70,11 +70,60 @@ func (s *Service) SetTransactionStateDiffs(ctx context.Context, stateDiffs []*ex
 
 	if err == nil {
 		if err := nestedTx.Commit(ctx); err != nil {
-			return errors.Wrap(err, "failed to commit nested transaction")
+			return errors.Wrap(err, "failed to commit balance nested transaction")
 		}
 	} else {
 		if err := nestedTx.Rollback(ctx); err != nil {
-			return errors.Wrap(err, "failed to roll back nested transaction")
+			return errors.Wrap(err, "failed to roll back balance nested transaction")
+		}
+
+		log.Debug().Err(err).Msg("Failed to copy insert balance state diffs; applying one at a time")
+		for _, stateDiff := range stateDiffs {
+			if err := s.SetTransactionStateDiff(ctx, stateDiff); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Flatten the storage changes.
+	storageChanges := make([]*execdb.TransactionStorageChange, 0)
+	for _, stateDiff := range stateDiffs {
+		storageChanges = append(storageChanges, stateDiff.StorageChanges...)
+	}
+
+	// Create a savepoint in case the copy fails.
+	nestedTx, err = tx.Begin(ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to create storage nested transaction")
+	}
+
+	_, err = nestedTx.CopyFrom(ctx,
+		pgx.Identifier{"t_transaction_storage_changes"},
+		[]string{
+			"f_transaction_hash",
+			"f_block_height",
+			"f_address",
+			"f_storage_address",
+			"f_value",
+		},
+		pgx.CopyFromSlice(len(storageChanges), func(i int) ([]interface{}, error) {
+			return []interface{}{
+				storageChanges[i].TransactionHash,
+				storageChanges[i].BlockHeight,
+				storageChanges[i].Address,
+				storageChanges[i].StorageAddress,
+				storageChanges[i].Value,
+			}, nil
+		}))
+
+	if err == nil {
+		if err := nestedTx.Commit(ctx); err != nil {
+			return errors.Wrap(err, "failed to commit storage nested transaction")
+		}
+	} else {
+		if err := nestedTx.Rollback(ctx); err != nil {
+			return errors.Wrap(err, "failed to roll back storage nested transaction")
 		}
 
 		log.Debug().Err(err).Msg("Failed to copy insert state diffs; applying one at a time")

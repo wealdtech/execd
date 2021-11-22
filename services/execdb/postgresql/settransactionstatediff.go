@@ -65,5 +65,30 @@ SET f_old = excluded.f_old
 		}
 	}
 
+	for _, storageChange := range stateDiff.StorageChanges {
+		_, err := tx.Exec(ctx, `
+INSERT INTO t_transaction_storage_changes(f_transaction_hash
+                                         ,f_block_height
+                                         ,f_address
+                                         ,f_storage_address
+                                         ,f_value
+                                         )
+VALUES($1,$2,$3,$4,$5)
+ON CONFLICT (f_transaction_hash,f_address,f_storage_address) DO
+UPDATE
+SET f_block_height = excluded.f_block_height
+   ,f_value = excluded.f_value
+`,
+			storageChange.TransactionHash,
+			storageChange.BlockHeight,
+			storageChange.Address,
+			storageChange.StorageAddress,
+			storageChange.Value,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }

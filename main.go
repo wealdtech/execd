@@ -124,9 +124,10 @@ func fetchConfig() error {
 	pflag.String("profile-address", "", "Address on which to run Go profile server")
 	pflag.String("tracing-address", "", "Address to which to send tracing data")
 	pflag.Bool("blocks.enable", true, "Enable fetching of block-related information")
-	pflag.Bool("transactions.enable", true, "Enable fetching of transaction-related information (requires blocks to be enabled)")
-	pflag.Bool("transactions.events.enable", true, "Enable fetching of transaction event information (requires blocks and transactions to be enabled)")
-	pflag.Bool("balances.enable", true, "Enable fetching of balance change information (requires blocks and transactions to be enabled)")
+	pflag.Bool("blocks.transactions.enable", true, "Enable fetching of transaction-related information (requires blocks to be enabled)")
+	pflag.Bool("blocks.transactions.events.enable", true, "Enable fetching of transaction event information (requires blocks and transactions to be enabled)")
+	pflag.Bool("blocks.transactions.balances.enable", true, "Enable fetching of balance change information (requires blocks and transactions to be enabled)")
+	pflag.Bool("blocks.transactions.storage.enable", true, "Enable fetching of storage change information (requires blocks and transactions to be enabled)")
 	pflag.String("blocks.style", "batch", "Use different blocks fetcher (available: batch, individual)")
 	pflag.Int32("blocks.start-height", -1, "Slot from which to start fetching blocks")
 	pflag.Bool("beacon-committees.enable", true, "Enable fetching of beacon committee-related information")
@@ -157,10 +158,6 @@ func fetchConfig() error {
 
 	// Defaults.
 	viper.SetDefault("process-concurrency", int64(runtime.GOMAXPROCS(-1)))
-	viper.SetDefault("blocks.enable", true)
-	viper.SetDefault("transactions.enable", true)
-	viper.SetDefault("transactions.events.enable", true)
-	viper.SetDefault("balances.enable", true)
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
@@ -326,6 +323,15 @@ func startBlocks(
 	if !isProvider {
 		return nil, errors.New("client does not provide block replays")
 	}
+	issuanceProvider, isProvider := execClient.(execclient.IssuanceProvider)
+	if isProvider {
+		// Confirm that it can fetch issuance.
+		_, err := issuanceProvider.Issuance(ctx, "1")
+		if err != nil {
+			// It can't, remove the provider.
+			issuanceProvider = nil
+		}
+	}
 	transactionReceiptsProvider, isProvider := execClient.(execclient.TransactionReceiptsProvider)
 	if !isProvider {
 		return nil, errors.New("client does not provide transaction receipts")
@@ -356,15 +362,17 @@ func startBlocks(
 			individualblocks.WithChainHeightProvider(chainHeightProvider),
 			individualblocks.WithBlocksProvider(blocksProvider),
 			individualblocks.WithBlockReplaysProvider(blockReplaysProvider),
+			individualblocks.WithIssuanceProvider(issuanceProvider),
 			individualblocks.WithTransactionReceiptsProvider(transactionReceiptsProvider),
 			individualblocks.WithBlocksSetter(blocksSetter),
 			individualblocks.WithTransactionsSetter(transactionsSetter),
 			individualblocks.WithTransactionStateDiffsSetter(transactionStateDiffsSetter),
 			individualblocks.WithEventsSetter(eventsSetter),
 			individualblocks.WithStartHeight(viper.GetInt64("blocks.start-height")),
-			individualblocks.WithTransactions(viper.GetBool("transactions.enable")),
-			individualblocks.WithTransactionEvents(viper.GetBool("transactions.events.enable")),
-			individualblocks.WithBalanceChanges(viper.GetBool("balances.enable")),
+			individualblocks.WithTransactions(viper.GetBool("blocks.transactions.enable")),
+			individualblocks.WithStorageChanges(viper.GetBool("blocks.transactions.storage.enable")),
+			individualblocks.WithBalanceChanges(viper.GetBool("blocks.transactions.balances.enable")),
+			individualblocks.WithTransactionEvents(viper.GetBool("blocks.transactions.events.enable")),
 		)
 	case "batch":
 		s, err = batchblocks.New(ctx,
@@ -373,15 +381,17 @@ func startBlocks(
 			batchblocks.WithChainHeightProvider(chainHeightProvider),
 			batchblocks.WithBlocksProvider(blocksProvider),
 			batchblocks.WithBlockReplaysProvider(blockReplaysProvider),
+			batchblocks.WithIssuanceProvider(issuanceProvider),
 			batchblocks.WithTransactionReceiptsProvider(transactionReceiptsProvider),
 			batchblocks.WithBlocksSetter(blocksSetter),
 			batchblocks.WithTransactionsSetter(transactionsSetter),
 			batchblocks.WithTransactionStateDiffsSetter(transactionStateDiffsSetter),
 			batchblocks.WithEventsSetter(eventsSetter),
 			batchblocks.WithStartHeight(viper.GetInt64("blocks.start-height")),
-			batchblocks.WithTransactions(viper.GetBool("transactions.enable")),
-			batchblocks.WithTransactionEvents(viper.GetBool("transactions.events.enable")),
-			batchblocks.WithBalanceChanges(viper.GetBool("balances.enable")),
+			batchblocks.WithTransactions(viper.GetBool("blocks.transactions.enable")),
+			batchblocks.WithStorageChanges(viper.GetBool("blocks.transactions.storage.enable")),
+			batchblocks.WithBalanceChanges(viper.GetBool("blocks.transactions.balances.enable")),
+			batchblocks.WithTransactionEvents(viper.GetBool("blocks.transactions.events.enable")),
 			batchblocks.WithProcessConcurrency(util.ProcessConcurrency("blocks")),
 		)
 	default:
