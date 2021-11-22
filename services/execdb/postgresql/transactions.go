@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"sort"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -67,14 +68,14 @@ FROM t_transactions`)
 	if filter.Sender != nil {
 		queryVals = append(queryVals, *filter.Sender)
 		queryBuilder.WriteString(fmt.Sprintf(`
-%s f_sender = $%d`, wherestr, len(queryVals)))
+%s f_from = $%d`, wherestr, len(queryVals)))
 		wherestr = "  AND"
 	}
 
 	if filter.Recipient != nil {
 		queryVals = append(queryVals, *filter.Recipient)
 		queryBuilder.WriteString(fmt.Sprintf(`
-%s f_recipient = $%d`, wherestr, len(queryVals)))
+%s f_to = $%d`, wherestr, len(queryVals)))
 		wherestr = "  AND"
 	}
 
@@ -157,5 +158,15 @@ LIMIT $%d`, len(queryVals)))
 		transactions = append(transactions, transaction)
 	}
 
+	// Always return order of block then index.
+	sort.Slice(transactions, func(i int, j int) bool {
+		if transactions[i].BlockHeight < transactions[j].BlockHeight {
+			return true
+		}
+		if transactions[i].BlockHeight > transactions[j].BlockHeight {
+			return false
+		}
+		return transactions[i].Index < transactions[j].Index
+	})
 	return transactions, nil
 }
