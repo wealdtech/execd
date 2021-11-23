@@ -13,12 +13,5 @@
 
 package blocks
 
-import (
-	"context"
-)
-
 // Service defines a block service.
-type Service interface {
-	// OnBlock handles a block.
-	OnBlock(ctx context.Context, hash []byte) error
-}
+type Service interface{}

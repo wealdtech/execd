@@ -37,14 +37,10 @@ func (s *Service) SetTransaction(ctx context.Context, transaction *execdb.Transa
 		input = &transaction.Input
 	}
 
-	var to *[]byte
-	if len(transaction.To) > 0 {
-		to = &transaction.To
-	}
-
 	_, err := tx.Exec(ctx, `
 INSERT INTO t_transactions(f_block_height
                           ,f_block_hash
+                          ,f_contract_address
                           ,f_index
                           ,f_type
                           ,f_from
@@ -63,10 +59,11 @@ INSERT INTO t_transactions(f_block_height
                           ,f_v
                           ,f_value
                           )
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
 ON CONFLICT (f_block_hash,f_index) DO
 UPDATE
 SET f_block_height = excluded.f_block_height
+   ,f_contract_address = excluded.f_contract_address
    ,f_type = excluded.f_type
    ,f_from = excluded.f_from
    ,f_gas_limit = excluded.f_gas_limit
@@ -86,6 +83,7 @@ SET f_block_height = excluded.f_block_height
 `,
 		transaction.BlockHeight,
 		transaction.BlockHash,
+		transaction.ContractAddress,
 		transaction.Index,
 		transaction.Type,
 		transaction.From,
@@ -100,7 +98,7 @@ SET f_block_height = excluded.f_block_height
 		transaction.R.Bytes(),
 		transaction.S.Bytes(),
 		transaction.Status,
-		to,
+		transaction.To,
 		transaction.V.Bytes(),
 		decimal.NewFromBigInt(transaction.Value, 0),
 	)

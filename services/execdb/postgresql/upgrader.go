@@ -245,6 +245,7 @@ CREATE UNIQUE INDEX i_blocks_2 ON t_blocks(f_hash);
 CREATE TABLE t_transactions (
   f_block_height             INTEGER NOT NULL
  ,f_block_hash               BYTEA NOT NULL REFERENCES t_blocks(f_hash) ON DELETE CASCADE
+ ,f_contract_address         BYTEA
  ,f_index                    INTEGER NOT NULL
  ,f_type                     BIGINT NOT NULL
  ,f_from                     BYTEA NOT NULL

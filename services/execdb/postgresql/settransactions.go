@@ -40,6 +40,7 @@ func (s *Service) SetTransactions(ctx context.Context, transactions []*execdb.Tr
 		[]string{
 			"f_block_height",
 			"f_block_hash",
+			"f_contract_address",
 			"f_index",
 			"f_type",
 			"f_from",
@@ -64,14 +65,10 @@ func (s *Service) SetTransactions(ctx context.Context, transactions []*execdb.Tr
 				input = &transactions[i].Input
 			}
 
-			var to *[]byte
-			if len(transactions[i].To) > 0 {
-				to = &transactions[i].To
-			}
-
 			return []interface{}{
 				transactions[i].BlockHeight,
 				transactions[i].BlockHash,
+				transactions[i].ContractAddress,
 				transactions[i].Index,
 				transactions[i].Type,
 				transactions[i].From,
@@ -86,7 +83,7 @@ func (s *Service) SetTransactions(ctx context.Context, transactions []*execdb.Tr
 				transactions[i].R.Bytes(),
 				transactions[i].S.Bytes(),
 				transactions[i].Status,
-				to,
+				transactions[i].To,
 				transactions[i].V.Bytes(),
 				decimal.NewFromBigInt(transactions[i].Value, 0),
 			}, nil

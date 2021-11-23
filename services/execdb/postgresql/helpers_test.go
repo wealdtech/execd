@@ -27,6 +27,14 @@ func byteArray(input string) []byte {
 	return val
 }
 
+func byteArrayPtr(input string) *[]byte {
+	val, err := hex.DecodeString(strings.TrimPrefix(input, "0x"))
+	if err != nil {
+		panic(err)
+	}
+	return &val
+}
+
 func bigInt(input string) *big.Int {
 	val, success := new(big.Int).SetString(input, 10)
 	if !success {

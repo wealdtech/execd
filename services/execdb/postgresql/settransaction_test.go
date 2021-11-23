@@ -67,7 +67,7 @@ func TestSetTransaction(t *testing.T) {
 				R:                    bigInt("1"),
 				S:                    bigInt("2"),
 				Status:               1,
-				To:                   byteArray("0x0102030405060708090a0b0c0d0e0f1011121314"),
+				To:                   byteArrayPtr("0x0102030405060708090a0b0c0d0e0f1011121314"),
 				V:                    bigInt("3"),
 				Value:                bigInt("12345000000000000000000"),
 			},

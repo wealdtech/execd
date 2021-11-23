@@ -15,51 +15,330 @@ package individual
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-execution-client/spec"
+	"github.com/pkg/errors"
+	"github.com/wealdtech/execd/services/execdb"
 )
 
-// OnBeaconChainHeadUpdated receives beacon chain head updated notifications.
-func (s *Service) OnBeaconChainHeadUpdated(
-	ctx context.Context,
-	slot phase0.Slot,
-	blockRoot phase0.Root,
-	stateRoot phase0.Root,
-	epochTransition bool,
-) {
-	// Only allow 1 handler to be active.
-	acquired := s.activitySem.TryAcquire(1)
-	if !acquired {
-		log.Debug().Msg("Another handler running")
-		return
-	}
-	defer s.activitySem.Release(1)
-
-	//	log := log.With().Uint64("slot", uint64(slot)).Str("block_root", fmt.Sprintf("%#x", blockRoot)).Logger()
-	//	log.Trace().
-	//		Str("state_root", fmt.Sprintf("%#x", stateRoot)).
-	//		Bool("epoch_transition", epochTransition).
-	//		Msg("Handler called")
-	//
-	//	if bytes.Equal(s.lastHandledBlockRoot[:], blockRoot[:]) {
-	//		log.Trace().Msg("Already handled this block; ignoring")
-	//		return
-	//	}
-
-	md, err := s.getMetadata(ctx)
+func (s *Service) catchup(ctx context.Context, md *metadata) {
+	chainHeight, err := s.chainHeightProvider.ChainHeight(ctx)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to obtain metadata")
+		log.Error().Err(err).Msg("Failed to obtain chain height")
 		return
 	}
+	safetyMargin := uint32(64) // Run 64 blocks behind for safety; could make this much tighter with integration With CL.
+	maxHeight := chainHeight - safetyMargin
+	log.Trace().Uint32("chain_height", chainHeight).Uint32("fetch_height", maxHeight).Msg("Fetch parameters")
 
-	s.catchup(ctx, md)
+	for height := uint32(md.LatestHeight + 1); height <= maxHeight; height++ {
+		log.Trace().Uint32("height", height).Msg("Fetching block")
+		block, err := s.blocksProvider.Block(ctx, fmt.Sprintf("%d", height))
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to obtain block")
+			return
+		}
 
-	//	s.lastHandledBlockRoot = blockRoot
-	//	monitorBlockProcessed(slot)
+		if err := s.handleBlock(ctx, md, block); err != nil {
+			log.Error().Err(err).Uint32("height", block.London.Number).Str("hash", fmt.Sprintf("%#x", block.London.Hash)).Msg("Failed to handle block")
+			return
+		}
+	}
 }
 
-// OnBlock handles a block.
-// This requires the context to hold an active transaction.
-func (s *Service) OnBlock(ctx context.Context, hash []byte) error {
+func (s *Service) handleBlock(ctx context.Context,
+	md *metadata,
+	block *spec.Block,
+) error {
+	ctx, cancel, err := s.blocksSetter.BeginTx(ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to begin transaction")
+	}
+	log.Trace().Uint32("height", block.London.Number).Str("hash", fmt.Sprintf("%#x", block.London.Hash)).Msg("Obtained block from client")
+
+	dbBlock := &execdb.Block{
+		Height:          block.London.Number,
+		Hash:            block.London.Hash[:],
+		BaseFee:         block.London.BaseFeePerGas,
+		Difficulty:      block.London.Difficulty,
+		ExtraData:       block.London.ExtraData,
+		GasLimit:        block.London.GasLimit,
+		GasUsed:         block.London.GasUsed,
+		FeeRecipient:    block.London.Miner[:],
+		ParentHash:      block.London.ParentHash[:],
+		Size:            block.London.Size,
+		StateRoot:       block.London.StateRoot[:],
+		Timestamp:       block.London.Timestamp,
+		TotalDifficulty: block.London.TotalDifficulty,
+	}
+
+	if s.issuanceProvider != nil {
+		issuance, err := s.issuanceProvider.Issuance(ctx, fmt.Sprintf("%d", block.London.Number))
+		if err != nil {
+			return err
+		}
+		dbBlock.Issuance = issuance.Issuance
+	}
+
+	if err := s.blocksSetter.SetBlock(ctx, dbBlock); err != nil {
+		cancel()
+		return errors.Wrap(err, "failed to set block")
+	}
+
+	if err := s.handleBlockTransactions(ctx, md, block); err != nil {
+		cancel()
+		return errors.Wrap(err, "failed to set block transactions")
+	}
+	md.LatestHeight = int64(block.London.Number)
+
+	if err := s.setMetadata(ctx, md); err != nil {
+		cancel()
+		return errors.Wrap(err, "failed to set metadata")
+	}
+
+	if err := s.blocksSetter.CommitTx(ctx); err != nil {
+		cancel()
+		return errors.Wrap(err, "failed to commit transaction")
+	}
+	monitorBlockProcessed(block.London.Number)
+
 	return nil
+}
+
+func (s *Service) handleBlockTransactions(ctx context.Context,
+	md *metadata,
+	block *spec.Block,
+) error {
+	dbTransactions := make([]*execdb.Transaction, 0, len(block.London.Transactions))
+	// Guess at initial capacity here...
+	dbEvents := make([]*execdb.Event, 0, len(block.London.Transactions)*4)
+	for i, transaction := range block.London.Transactions {
+		var dbTransaction *execdb.Transaction
+		switch tx := transaction.(type) {
+		case *spec.Type0Transaction:
+			dbTransaction = s.compileType0Transaction(ctx, block, tx, i)
+		case *spec.Type1Transaction:
+			dbTransaction = s.compileType1Transaction(ctx, block, tx, i)
+		case *spec.Type2Transaction:
+			dbTransaction = s.compileType2Transaction(ctx, block, tx, i)
+		default:
+			log.Warn().Uint64("type", transaction.Type()).Msg("Unhandled transaction type")
+			continue
+		}
+
+		dbTxEvents, err := s.addTransactionReceiptInfo(ctx, dbTransaction)
+		if err != nil {
+			return errors.Wrap(err, "failed to add receipt to transaction")
+		}
+
+		dbTransactions = append(dbTransactions, dbTransaction)
+		dbEvents = append(dbEvents, dbTxEvents...)
+	}
+
+	if s.enableTransactionEvents {
+		if err := s.transactionsSetter.SetTransactions(ctx, dbTransactions); err != nil {
+			return errors.Wrap(err, "failed to set transactions")
+		}
+	}
+
+	if s.enableTransactionEvents {
+		if err := s.eventsSetter.SetEvents(ctx, dbEvents); err != nil {
+			return errors.Wrap(err, "failed to set events")
+		}
+	}
+
+	if s.enableBalanceChanges || s.enableStorageChanges {
+		transactionsResults, err := s.blockReplaysProvider.ReplayBlockTransactions(ctx, fmt.Sprintf("%d", block.London.Number))
+		if err != nil {
+			return errors.Wrap(err, "failed to replay block")
+		}
+
+		// Guess at initial capacity here...
+		dbStateDiffs := make([]*execdb.TransactionStateDiff, 0, len(block.London.Transactions)*4)
+		for _, transactionResults := range transactionsResults {
+			dbStateDiff := &execdb.TransactionStateDiff{
+				BalanceChanges: make([]*execdb.TransactionBalanceChange, 0, len(transactionResults.StateDiff)),
+			}
+			for k, stateDiff := range transactionResults.StateDiff {
+				address := k
+				if stateDiff.Balance != nil {
+					dbBalanceChange := &execdb.TransactionBalanceChange{
+						TransactionHash: transactionResults.TransactionHash,
+						BlockHeight:     block.London.Number,
+						Address:         address[:],
+						Old:             stateDiff.Balance.From,
+						New:             stateDiff.Balance.To,
+					}
+					dbStateDiff.BalanceChanges = append(dbStateDiff.BalanceChanges, dbBalanceChange)
+				}
+
+				if stateDiff.Storage != nil {
+					for l, stateChange := range stateDiff.Storage {
+						storageHash := l
+						dbStorageChange := &execdb.TransactionStorageChange{
+							TransactionHash: transactionResults.TransactionHash,
+							BlockHeight:     block.London.Number,
+							Address:         address[:],
+							StorageAddress:  storageHash[:],
+							Value:           stateChange.To,
+						}
+						dbStateDiff.StorageChanges = append(dbStateDiff.StorageChanges, dbStorageChange)
+					}
+				}
+			}
+			dbStateDiffs = append(dbStateDiffs, dbStateDiff)
+		}
+
+		if err := s.transactionStateDiffsSetter.SetTransactionStateDiffs(ctx, dbStateDiffs); err != nil {
+			return errors.Wrap(err, "failed to set state differences")
+		}
+	}
+
+	return nil
+}
+
+func (s *Service) compileType0Transaction(ctx context.Context,
+	block *spec.Block,
+	tx *spec.Type0Transaction,
+	index int,
+) *execdb.Transaction {
+	var to *[]byte
+	if tx.To != nil {
+		tmp := tx.To[:]
+		to = &tmp
+	}
+	return &execdb.Transaction{
+		BlockHeight: block.London.Number,
+		BlockHash:   tx.BlockHash[:],
+		// ContractAddress comes from receipt.
+		Index:    uint32(index),
+		Type:     0,
+		From:     tx.From[:],
+		GasLimit: tx.Gas,
+		GasPrice: &tx.GasPrice,
+		// Gas used comes from receipt.
+		Hash:  tx.Hash[:],
+		Input: tx.Input,
+		Nonce: tx.Nonce,
+		R:     tx.R,
+		S:     tx.S,
+		// Status comes from receipt.
+		To:    to,
+		V:     tx.V,
+		Value: tx.Value,
+	}
+}
+
+func (s *Service) compileType1Transaction(ctx context.Context,
+	block *spec.Block,
+	tx *spec.Type1Transaction,
+	index int,
+) *execdb.Transaction {
+	var to *[]byte
+	if tx.To != nil {
+		tmp := tx.To[:]
+		to = &tmp
+	}
+	accessList := make(map[string][][]byte)
+	for _, entry := range tx.AccessList {
+		accessList[fmt.Sprintf("%#x", entry.Address)] = entry.StorageKeys
+	}
+	return &execdb.Transaction{
+		AccessList:  accessList,
+		BlockHeight: block.London.Number,
+		BlockHash:   tx.BlockHash[:],
+		// ContractAddress comes from receipt.
+		Index:    uint32(index),
+		Type:     1,
+		From:     tx.From[:],
+		GasLimit: tx.Gas,
+		GasPrice: &tx.GasPrice,
+		// Gas used comes from receipt.
+		Hash:  tx.Hash[:],
+		Input: tx.Input,
+		Nonce: tx.Nonce,
+		R:     tx.R,
+		S:     tx.S,
+		// Status comes from receipt.
+		To:    to,
+		V:     tx.V,
+		Value: tx.Value,
+	}
+}
+
+func (s *Service) compileType2Transaction(ctx context.Context,
+	block *spec.Block,
+	tx *spec.Type2Transaction,
+	index int,
+) *execdb.Transaction {
+	var to *[]byte
+	if tx.To != nil {
+		tmp := tx.To[:]
+		to = &tmp
+	}
+	accessList := make(map[string][][]byte)
+	for _, entry := range tx.AccessList {
+		accessList[fmt.Sprintf("%#x", entry.Address)] = entry.StorageKeys
+	}
+	return &execdb.Transaction{
+		AccessList:  accessList,
+		BlockHeight: block.London.Number,
+		BlockHash:   tx.BlockHash[:],
+		// ContractAddress comes from receipt.
+		Index:    uint32(index),
+		Type:     2,
+		From:     tx.From[:],
+		GasLimit: tx.Gas,
+		Hash:     tx.Hash[:],
+		Input:    tx.Input,
+		// Gas used comes from receipt.
+		MaxFeePerGas:         &tx.MaxFeePerGas,
+		MaxPriorityFeePerGas: &tx.MaxPriorityFeePerGas,
+		Nonce:                tx.Nonce,
+		R:                    tx.R,
+		S:                    tx.S,
+		// Status comes from receipt.
+		To:    to,
+		V:     tx.V,
+		Value: tx.Value,
+	}
+}
+
+func (s *Service) addTransactionReceiptInfo(ctx context.Context,
+	dbTransaction *execdb.Transaction,
+) (
+	[]*execdb.Event,
+	error,
+) {
+	receipt, err := s.transactionReceiptsProvider.TransactionReceipt(ctx, dbTransaction.Hash)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to obtain transaction receipt")
+	}
+	if receipt.GasUsed > 0 {
+		dbTransaction.GasUsed = receipt.GasUsed
+		dbTransaction.Status = receipt.Status
+	}
+	if receipt.ContractAddress != nil {
+		tmp := receipt.To[:]
+		dbTransaction.ContractAddress = &tmp
+	}
+
+	dbEvents := make([]*execdb.Event, 0, len(receipt.Logs))
+	for _, event := range receipt.Logs {
+		topics := make([][]byte, len(event.Topics))
+		for i := range event.Topics {
+			topics[i] = event.Topics[i][:]
+		}
+		dbEvents = append(dbEvents, &execdb.Event{
+			TransactionHash: dbTransaction.Hash,
+			BlockHeight:     receipt.BlockNumber,
+			Index:           event.Index,
+			Address:         event.Address[:],
+			Topics:          topics,
+			Data:            event.Data,
+		})
+	}
+
+	return dbEvents, nil
 }

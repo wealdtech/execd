@@ -41,6 +41,7 @@ type Transaction struct {
 	AccessList           map[string][][]byte
 	BlockHeight          uint32
 	BlockHash            []byte
+	ContractAddress      *[]byte
 	Index                uint32
 	Type                 uint64
 	From                 []byte
@@ -55,7 +56,7 @@ type Transaction struct {
 	R                    *big.Int
 	S                    *big.Int
 	Status               uint32
-	To                   []byte
+	To                   *[]byte
 	V                    *big.Int
 	Value                *big.Int
 }

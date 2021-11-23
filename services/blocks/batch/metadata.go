@@ -25,15 +25,18 @@ type metadata struct {
 	LatestHeight int64 `json:"latest_height"`
 }
 
-// metadataKey is the key for the metadata.
-var metadataKey = "blocks.batch"
+// serviceMetadataKey is the key for the service-specific metadata.
+var serviceMetadataKey = "blocks"
+
+// implMetadataKey is the key for the implementation-specific metadata.
+// var implMetadataKey = "blocks.batch"
 
 // getMetadata gets metadata for this service.
 func (s *Service) getMetadata(ctx context.Context) (*metadata, error) {
 	md := &metadata{
 		LatestHeight: -1,
 	}
-	mdJSON, err := s.blocksSetter.Metadata(ctx, metadataKey)
+	mdJSON, err := s.blocksSetter.Metadata(ctx, serviceMetadataKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch metadata")
 	}
@@ -52,8 +55,38 @@ func (s *Service) setMetadata(ctx context.Context, md *metadata) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal metadata")
 	}
-	if err := s.blocksSetter.SetMetadata(ctx, metadataKey, mdJSON); err != nil {
+	if err := s.blocksSetter.SetMetadata(ctx, serviceMetadataKey, mdJSON); err != nil {
 		return errors.Wrap(err, "failed to update metadata")
 	}
 	return nil
 }
+
+// // getImplMetadata gets metadata for this implementation.
+// func (s *Service) getImplMetadata(ctx context.Context) (*metadata, error) {
+// 	md := &metadata{
+// 		LatestHeight: -1,
+// 	}
+// 	mdJSON, err := s.blocksSetter.Metadata(ctx, implMetadataKey)
+// 	if err != nil {
+// 		return nil, errors.Wrap(err, "failed to fetch metadata")
+// 	}
+// 	if mdJSON == nil {
+// 		return md, nil
+// 	}
+// 	if err := json.Unmarshal(mdJSON, md); err != nil {
+// 		return nil, errors.Wrap(err, "failed to unmarshal metadata")
+// 	}
+// 	return md, nil
+// }
+//
+// // setImplMetadata sets metadata for this implementation.
+// func (s *Service) setImplMetadata(ctx context.Context, md *metadata) error {
+// 	mdJSON, err := json.Marshal(md)
+// 	if err != nil {
+// 		return errors.Wrap(err, "failed to marshal metadata")
+// 	}
+// 	if err := s.blocksSetter.SetMetadata(ctx, implMetadataKey, mdJSON); err != nil {
+// 		return errors.Wrap(err, "failed to update metadata")
+// 	}
+// 	return nil
+// }

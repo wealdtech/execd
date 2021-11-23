@@ -20,11 +20,13 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/wealdtech/execd/services/execdb"
 	"github.com/wealdtech/execd/services/metrics"
+	"github.com/wealdtech/execd/services/scheduler"
 )
 
 type parameters struct {
 	logLevel                    zerolog.Level
 	monitor                     metrics.Service
+	scheduler                   scheduler.Service
 	chainHeightProvider         execclient.ChainHeightProvider
 	blocksProvider              execclient.BlocksProvider
 	blockReplaysProvider        execclient.BlockReplaysProvider
@@ -64,6 +66,13 @@ func WithLogLevel(logLevel zerolog.Level) Parameter {
 func WithMonitor(monitor metrics.Service) Parameter {
 	return parameterFunc(func(p *parameters) {
 		p.monitor = monitor
+	})
+}
+
+// WithScheduler sets the scheduler for the module.
+func WithScheduler(scheduler scheduler.Service) Parameter {
+	return parameterFunc(func(p *parameters) {
+		p.scheduler = scheduler
 	})
 }
 
@@ -184,6 +193,9 @@ func parseAndCheckParameters(params ...Parameter) (*parameters, error) {
 		}
 	}
 
+	if parameters.scheduler == nil {
+		return nil, errors.New("no scheduler specified")
+	}
 	if parameters.chainHeightProvider == nil {
 		return nil, errors.New("no chain height provider specified")
 	}

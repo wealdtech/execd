@@ -21,7 +21,7 @@ import (
 	"github.com/wealdtech/execd/services/metrics"
 )
 
-var metricsNamespace = "execd_blocks"
+var metricsNamespace = "blocks"
 
 var latestBlock prometheus.Gauge
 var blocksProcessed prometheus.Gauge
@@ -44,20 +44,20 @@ func registerMetrics(ctx context.Context, monitor metrics.Service) error {
 func registerPrometheusMetrics(ctx context.Context) error {
 	latestBlock = prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace: metricsNamespace,
-		Name:      "latest_block",
+		Name:      "latest",
 		Help:      "Latest block processed",
 	})
 	if err := prometheus.Register(latestBlock); err != nil {
-		return errors.Wrap(err, "failed to register latest_block")
+		return errors.Wrap(err, "failed to register latest block")
 	}
 
 	blocksProcessed = prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace: metricsNamespace,
-		Name:      "blocks_processed",
+		Name:      "processed",
 		Help:      "Number of blocks processed",
 	})
 	if err := prometheus.Register(blocksProcessed); err != nil {
-		return errors.Wrap(err, "failed to register blocks_processed")
+		return errors.Wrap(err, "failed to register blocks processed")
 	}
 
 	return nil

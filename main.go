@@ -43,6 +43,7 @@ import (
 	"github.com/wealdtech/execd/services/metrics"
 	nullmetrics "github.com/wealdtech/execd/services/metrics/null"
 	prometheusmetrics "github.com/wealdtech/execd/services/metrics/prometheus"
+	standardscheduler "github.com/wealdtech/execd/services/scheduler/standard"
 	"github.com/wealdtech/execd/util"
 )
 
@@ -303,7 +304,14 @@ func startBlocks(
 		return nil, nil
 	}
 
-	var err error
+	scheduler, err := standardscheduler.New(ctx,
+		standardscheduler.WithLogLevel(util.LogLevel("scheduler")),
+		standardscheduler.WithMonitor(monitor),
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to start scheduler service")
+	}
+
 	if viper.GetString("blocks.execclient.address") != "" {
 		execClient, err = fetchClient(ctx, viper.GetString("blocks.execclient.address"))
 		if err != nil {
@@ -359,6 +367,7 @@ func startBlocks(
 		s, err = individualblocks.New(ctx,
 			individualblocks.WithLogLevel(util.LogLevel("blocks")),
 			individualblocks.WithMonitor(monitor),
+			individualblocks.WithScheduler(scheduler),
 			individualblocks.WithChainHeightProvider(chainHeightProvider),
 			individualblocks.WithBlocksProvider(blocksProvider),
 			individualblocks.WithBlockReplaysProvider(blockReplaysProvider),
@@ -378,6 +387,7 @@ func startBlocks(
 		s, err = batchblocks.New(ctx,
 			batchblocks.WithLogLevel(util.LogLevel("blocks")),
 			batchblocks.WithMonitor(monitor),
+			batchblocks.WithScheduler(scheduler),
 			batchblocks.WithChainHeightProvider(chainHeightProvider),
 			batchblocks.WithBlocksProvider(blocksProvider),
 			batchblocks.WithBlockReplaysProvider(blockReplaysProvider),
