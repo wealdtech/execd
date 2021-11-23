@@ -131,8 +131,8 @@ func fetchConfig() error {
 	pflag.Bool("blocks.transactions.storage.enable", true, "Enable fetching of storage change information (requires blocks and transactions to be enabled)")
 	pflag.String("blocks.style", "batch", "Use different blocks fetcher (available: batch, individual)")
 	pflag.Int32("blocks.start-height", -1, "Slot from which to start fetching blocks")
-	pflag.Bool("beacon-committees.enable", true, "Enable fetching of beacon committee-related information")
 	pflag.String("execclient.address", "", "Address for execution node JSON-RPC endpoint")
+	pflag.Duration("execclient.timeout", 60*time.Second, "Timeout for execution node requests")
 	pflag.Parse()
 	if err := viper.BindPFlags(pflag.CommandLine); err != nil {
 		return errors.Wrap(err, "failed to bind pflags to viper")
