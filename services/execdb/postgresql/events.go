@@ -16,17 +16,15 @@ package postgresql
 import (
 	"context"
 	"fmt"
-	"math/big"
 	"sort"
 	"strings"
 
 	"github.com/pkg/errors"
-	"github.com/shopspring/decimal"
 	"github.com/wealdtech/execd/services/execdb"
 )
 
-// Transactions returns transactions matching the supplied filter.
-func (s *Service) Transactions(ctx context.Context, filter *execdb.TransactionFilter) ([]*execdb.Transaction, error) {
+// Events returns events matching the supplied filter.
+func (s *Service) Events(ctx context.Context, filter *execdb.EventFilter) ([]*execdb.Event, error) {
 	tx := s.tx(ctx)
 	if tx == nil {
 		ctx, cancel, err := s.BeginTx(ctx)
@@ -42,40 +40,27 @@ func (s *Service) Transactions(ctx context.Context, filter *execdb.TransactionFi
 	queryVals := make([]interface{}, 0)
 
 	queryBuilder.WriteString(`
-SELECT f_block_height
-      ,f_block_hash
+SELECT f_transaction_hash
+      ,f_block_height
       ,f_index
-      ,f_type
-      ,f_from
-      ,f_gas_limit
-      ,f_gas_price
-      ,f_gas_used
-      ,f_hash
-      ,f_input
-      ,f_max_fee_per_gas
-      ,f_max_priority_fee_per_gas
-      ,f_nonce
-      ,f_r
-      ,f_s
-      ,f_status
-      ,f_to
-      ,f_v
-      ,f_value
-FROM t_transactions`)
+      ,f_address
+      ,f_topics
+      ,f_data
+FROM t_events`)
 
 	wherestr := "WHERE"
 
-	if filter.Sender != nil {
-		queryVals = append(queryVals, *filter.Sender)
+	if filter.Address != nil {
+		queryVals = append(queryVals, *filter.Address)
 		queryBuilder.WriteString(fmt.Sprintf(`
-%s f_from = $%d`, wherestr, len(queryVals)))
+%s f_address = $%d`, wherestr, len(queryVals)))
 		wherestr = "  AND"
 	}
 
-	if filter.Recipient != nil {
-		queryVals = append(queryVals, *filter.Recipient)
+	if filter.TransactionHash != nil {
+		queryVals = append(queryVals, *filter.TransactionHash)
 		queryBuilder.WriteString(fmt.Sprintf(`
-%s f_to = $%d`, wherestr, len(queryVals)))
+%s f_transaction_hash = $%d`, wherestr, len(queryVals)))
 		wherestr = "  AND"
 	}
 
@@ -116,54 +101,29 @@ LIMIT $%d`, len(queryVals)))
 	}
 	defer rows.Close()
 
-	transactions := make([]*execdb.Transaction, 0)
+	events := make([]*execdb.Event, 0)
 	for rows.Next() {
-		transaction := &execdb.Transaction{}
-		r := make([]byte, 0)
-		s := make([]byte, 0)
-		v := make([]byte, 0)
-		value := decimal.Zero
+		event := &execdb.Event{}
 		err := rows.Scan(
-			&transaction.BlockHeight,
-			&transaction.BlockHash,
-			&transaction.Index,
-			&transaction.Type,
-			&transaction.From,
-			&transaction.GasLimit,
-			&transaction.GasPrice,
-			&transaction.GasUsed,
-			&transaction.Hash,
-			&transaction.Input,
-			&transaction.MaxFeePerGas,
-			&transaction.MaxPriorityFeePerGas,
-			&transaction.Nonce,
-			&r,
-			&s,
-			&transaction.Status,
-			&transaction.To,
-			&v,
-			&value,
+			&event.TransactionHash,
+			&event.BlockHeight,
+			&event.Index,
+			&event.Address,
+			&event.Topics,
+			&event.Data,
 		)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to scan row")
 		}
-		transaction.R = new(big.Int).SetBytes(r)
-		transaction.S = new(big.Int).SetBytes(s)
-		transaction.V = new(big.Int).SetBytes(v)
-		var success bool
-		transaction.Value, success = new(big.Int).SetString(value.String(), 10)
-		if !success {
-			return nil, errors.New("Failed to obtain value")
-		}
-		transactions = append(transactions, transaction)
+		events = append(events, event)
 	}
 
 	// Always return order of block then index.
-	sort.Slice(transactions, func(i int, j int) bool {
-		if transactions[i].BlockHeight != transactions[j].BlockHeight {
-			return transactions[i].BlockHeight < transactions[j].BlockHeight
+	sort.Slice(events, func(i int, j int) bool {
+		if events[i].BlockHeight != events[j].BlockHeight {
+			return events[i].BlockHeight < events[j].BlockHeight
 		}
-		return transactions[i].Index < transactions[j].Index
+		return events[i].Index < events[j].Index
 	})
-	return transactions, nil
+	return events, nil
 }

@@ -17,17 +17,15 @@ package execdb
 type Order uint8
 
 const (
-	// OrderUnknown is an unknown order.
-	OrderUnknown Order = iota
 	// OrderEarliest fetches earliest transactions first.
-	OrderEarliest
+	OrderEarliest Order = iota
 	// OrderLatest fetches latest transactions first.
 	OrderLatest
 )
 
 // TransactionFilter defines a filter for fetching transactions.
 // Filter elements are ANDed together.
-// Results are always returned in ascending (block height, index) order.
+// Results are always returned in ascending (block height, transaction index) order.
 type TransactionFilter struct {
 	// Limit is the maximum number of transactions to return.
 	Limit uint32
@@ -53,4 +51,34 @@ type TransactionFilter struct {
 	// Recipient is the address of the recipient field in the transaction.
 	// If nil then no filter is applied
 	Recipient *[]byte
+}
+
+// EventFilter defines a filter for fetching events.
+// Filter elements are ANDed together.
+// Results are always returned in ascending (block height, transaction index, event index) order.
+type EventFilter struct {
+	// Limit is the maximum number of events to return.
+	Limit uint32
+
+	// Order is either OrderEarliest, in which case the earliest results
+	// that match the filter are returned, or OrderLatest, in which case the
+	// latest results that match the filter are returned.
+	// The default is OrderEarliest.
+	Order Order
+
+	// From is the height of the earliest block from which to fetch events.
+	// If nil then there is no earliest block.
+	From *uint32
+
+	// To is the height of the latest block from which to fetch events.
+	// If nil then there is no latest block.
+	To *uint32
+
+	// TransactionHash is the hash of the transaction that generated the event.
+	// If nil then no filter is applied
+	TransactionHash *[]byte
+
+	// Address is the address of the contract that generated the event.
+	// If nil then no filter is applied
+	Address *[]byte
 }

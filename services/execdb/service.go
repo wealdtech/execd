@@ -42,6 +42,12 @@ type BlocksSetter interface {
 	SetBlocks(ctx context.Context, blocks []*Block) error
 }
 
+// EventsProvider defines functions to provide event information.
+type EventsProvider interface {
+	// Events returns events matching the supplied filter.
+	Events(ctx context.Context, filter *EventFilter) ([]*Event, error)
+}
+
 // EventsSetter defines functions to create and update events.
 type EventsSetter interface {
 	Service
