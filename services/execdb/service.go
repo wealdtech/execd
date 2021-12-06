@@ -70,7 +70,7 @@ type TransactionsSetter interface {
 	// SetTransaction sets a transaction.
 	SetTransaction(ctx context.Context, transaction *Transaction) error
 
-	// SetTransaction sets multiple transactions efficiently.
+	// SetTransactions sets multiple transactions efficiently.
 	SetTransactions(ctx context.Context, transactions []*Transaction) error
 }
 
@@ -80,6 +80,6 @@ type TransactionStateDiffsSetter interface {
 	// SetTransactionStateDiff sets a transaction's state differences.
 	SetTransactionStateDiff(ctx context.Context, stateDiff *TransactionStateDiff) error
 
-	// SetTransactionStateDiff sets multiple transactions' state differences efficiently.
+	// SetTransactionStateDiffs sets multiple transactions' state differences efficiently.
 	SetTransactionStateDiffs(ctx context.Context, stateDiffs []*TransactionStateDiff) error
 }

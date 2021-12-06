@@ -265,8 +265,8 @@ CREATE TABLE t_transactions (
  ,f_value                    NUMERIC NOT NULL
 );
 CREATE UNIQUE INDEX i_transactions_1 ON t_transactions(f_block_hash,f_index);
-CREATE INDEX i_transactions_2 ON t_transactions(f_from);
-CREATE INDEX i_transactions_3 ON t_transactions(f_to);
+CREATE INDEX i_transactions_2 ON t_transactions(f_from,f_block_height);
+CREATE INDEX i_transactions_3 ON t_transactions(f_to,f_block_height);
 CREATE INDEX i_transactions_4 ON t_transactions(f_block_height);
 
 -- t_transaction_balance_changes contains balance changes as a result of a transaction.
