@@ -44,6 +44,7 @@ type Service struct {
 	enableBalanceChanges        bool
 	enableStorageChanges        bool
 	processConcurrency          int64
+	interval                    time.Duration
 }
 
 // module-wide log.
@@ -80,6 +81,7 @@ func New(ctx context.Context, params ...Parameter) (*Service, error) {
 		enableBalanceChanges:        parameters.enableBalanceChanges,
 		enableStorageChanges:        parameters.enableStorageChanges,
 		processConcurrency:          parameters.processConcurrency,
+		interval:                    parameters.interval,
 	}
 
 	// Update to current block before starting (in the background).
@@ -102,11 +104,10 @@ func (s *Service) updateOnRestart(ctx context.Context, startHeight int64) {
 
 	log.Info().Int64("height", md.LatestHeight).Msg("Catching up from slot")
 	s.catchup(ctx, md)
-	log.Info().Msg("Caught up; starting periodic update")
+	log.Info().Int64("height", md.LatestHeight).Msg("Caught up; starting periodic update")
 
 	runtimeFunc := func(ctx context.Context, data interface{}) (time.Time, error) {
-		// Make configurable.
-		return time.Now().Add(2 * time.Minute), nil
+		return time.Now().Add(s.interval), nil
 	}
 
 	if err := s.scheduler.SchedulePeriodicJob(ctx,
@@ -138,5 +139,5 @@ func (s *Service) updateOnScheduleTick(ctx context.Context, data interface{}) {
 
 	log.Trace().Int64("height", md.LatestHeight).Msg("Catching up from slot")
 	s.catchup(ctx, md)
-	log.Trace().Msg("Caught up")
+	log.Trace().Int64("height", md.LatestHeight).Msg("Caught up")
 }

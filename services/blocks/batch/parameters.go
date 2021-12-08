@@ -15,6 +15,7 @@ package batch
 
 import (
 	"errors"
+	"time"
 
 	execclient "github.com/attestantio/go-execution-client"
 	"github.com/rs/zerolog"
@@ -42,6 +43,7 @@ type parameters struct {
 	enableBalanceChanges        bool
 	enableStorageChanges        bool
 	processConcurrency          int64
+	interval                    time.Duration
 }
 
 // Parameter is the interface for service parameters.
@@ -181,11 +183,17 @@ func WithProcessConcurrency(concurrency int64) Parameter {
 	})
 }
 
+// WithInterval sets the interval between updates.
+func WithInterval(interval time.Duration) Parameter {
+	return parameterFunc(func(p *parameters) {
+		p.interval = interval
+	})
+}
+
 // parseAndCheckParameters parses and checks parameters to ensure that mandatory parameters are present and correct.
 func parseAndCheckParameters(params ...Parameter) (*parameters, error) {
 	parameters := parameters{
-		logLevel:    zerolog.GlobalLevel(),
-		startHeight: -1,
+		logLevel: zerolog.GlobalLevel(),
 	}
 	for _, p := range params {
 		if params != nil {
@@ -223,6 +231,9 @@ func parseAndCheckParameters(params ...Parameter) (*parameters, error) {
 	}
 	if parameters.processConcurrency == 0 {
 		return nil, errors.New("no process concurrency specified")
+	}
+	if parameters.interval == 0 {
+		return nil, errors.New("no interval specified")
 	}
 
 	return &parameters, nil

@@ -43,6 +43,7 @@ type Service struct {
 	enableTransactionEvents     bool
 	enableBalanceChanges        bool
 	enableStorageChanges        bool
+	interval                    time.Duration
 }
 
 // module-wide log.
@@ -78,6 +79,7 @@ func New(ctx context.Context, params ...Parameter) (*Service, error) {
 		enableTransactionEvents:     parameters.enableTransactionEvents,
 		enableBalanceChanges:        parameters.enableBalanceChanges,
 		enableStorageChanges:        parameters.enableStorageChanges,
+		interval:                    parameters.interval,
 	}
 
 	// Update to current block before starting (in the background).
@@ -103,8 +105,7 @@ func (s *Service) updateOnRestart(ctx context.Context, startHeight int64) {
 	log.Info().Msg("Caught up; starting periodic update")
 
 	runtimeFunc := func(ctx context.Context, data interface{}) (time.Time, error) {
-		// Make configurable.
-		return time.Now().Add(2 * time.Minute), nil
+		return time.Now().Add(s.interval), nil
 	}
 
 	if err := s.scheduler.SchedulePeriodicJob(ctx,

@@ -50,7 +50,7 @@ func (s *Service) catchup(ctx context.Context, md *metadata) {
 
 		entries := uint32(s.processConcurrency)
 		if height+entries > maxHeight {
-			entries = maxHeight - height
+			entries = maxHeight + 1 - height
 		}
 
 		blockHeights := make([]uint32, entries)

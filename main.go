@@ -48,7 +48,7 @@ import (
 )
 
 // ReleaseVersion is the release version for the code.
-var ReleaseVersion = "0.1.2"
+var ReleaseVersion = "0.2.0"
 
 func main() {
 	os.Exit(main2())
@@ -130,6 +130,7 @@ func fetchConfig() error {
 	pflag.Bool("blocks.transactions.balances.enable", true, "Enable fetching of balance change information (requires blocks and transactions to be enabled)")
 	pflag.Bool("blocks.transactions.storage.enable", true, "Enable fetching of storage change information (requires blocks and transactions to be enabled)")
 	pflag.String("blocks.style", "batch", "Use different blocks fetcher (available: batch, individual)")
+	pflag.Duration("blocks.interval", 30*time.Second, "Interval between updates")
 	pflag.Int32("blocks.start-height", -1, "Slot from which to start fetching blocks")
 	pflag.String("execclient.address", "", "Address for execution node JSON-RPC endpoint")
 	pflag.Duration("execclient.timeout", 60*time.Second, "Timeout for execution node requests")
@@ -382,6 +383,7 @@ func startBlocks(
 			individualblocks.WithStorageChanges(viper.GetBool("blocks.transactions.storage.enable")),
 			individualblocks.WithBalanceChanges(viper.GetBool("blocks.transactions.balances.enable")),
 			individualblocks.WithTransactionEvents(viper.GetBool("blocks.transactions.events.enable")),
+			individualblocks.WithInterval(viper.GetDuration("blocks.interval")),
 		)
 	case "batch":
 		s, err = batchblocks.New(ctx,
@@ -403,6 +405,7 @@ func startBlocks(
 			batchblocks.WithBalanceChanges(viper.GetBool("blocks.transactions.balances.enable")),
 			batchblocks.WithTransactionEvents(viper.GetBool("blocks.transactions.events.enable")),
 			batchblocks.WithProcessConcurrency(util.ProcessConcurrency("blocks")),
+			batchblocks.WithInterval(viper.GetDuration("blocks.interval")),
 		)
 	default:
 		return nil, errors.New("unknown blocks stylw")
