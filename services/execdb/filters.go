@@ -28,7 +28,8 @@ const (
 // Results are always returned in ascending (block height, transaction index) order.
 type TransactionFilter struct {
 	// Limit is the maximum number of transactions to return.
-	Limit uint32
+	// If nil then there is no limit.
+	Limit *uint32
 
 	// Order is either OrderEarliest, in which case the earliest results
 	// that match the filter are returned, or OrderLatest, in which case the
@@ -58,7 +59,8 @@ type TransactionFilter struct {
 // Results are always returned in ascending (block height, transaction index, event index) order.
 type EventFilter struct {
 	// Limit is the maximum number of events to return.
-	Limit uint32
+	// If nil then there is no limit.
+	Limit *uint32
 
 	// Order is either OrderEarliest, in which case the earliest results
 	// that match the filter are returned, or OrderLatest, in which case the

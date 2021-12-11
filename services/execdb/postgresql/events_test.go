@@ -55,7 +55,7 @@ func TestEvents(t *testing.T) {
 		{
 			name: "SingleBlockFirstEvent",
 			filter: &execdb.EventFilter{
-				Limit: 1,
+				Limit: uint32Ptr(1),
 				Order: execdb.OrderEarliest,
 				From:  uint32Ptr(13027871),
 				To:    uint32Ptr(13027871),
@@ -65,7 +65,7 @@ func TestEvents(t *testing.T) {
 		{
 			name: "SingleBlockLastEvent",
 			filter: &execdb.EventFilter{
-				Limit: 1,
+				Limit: uint32Ptr(1),
 				Order: execdb.OrderLatest,
 				From:  uint32Ptr(13027871),
 				To:    uint32Ptr(13027871),
@@ -75,7 +75,7 @@ func TestEvents(t *testing.T) {
 		{
 			name: "SingleBlockBothEvents",
 			filter: &execdb.EventFilter{
-				Limit: 2,
+				Limit: uint32Ptr(2),
 				Order: execdb.OrderEarliest,
 				From:  uint32Ptr(13027871),
 				To:    uint32Ptr(13027871),
@@ -85,7 +85,6 @@ func TestEvents(t *testing.T) {
 		{
 			name: "SingleTransactionAllEvents",
 			filter: &execdb.EventFilter{
-				Limit:           999,
 				Order:           execdb.OrderEarliest,
 				TransactionHash: hashPtr("0x589e8179b6aec2855b517e3841445874c133bb7e9dc453d9aea5c7df4f57b1f6"),
 			},
