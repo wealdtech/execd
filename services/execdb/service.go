@@ -62,6 +62,9 @@ type EventsSetter interface {
 type TransactionsProvider interface {
 	// Transactions returns transactions matching the supplied filter.
 	Transactions(ctx context.Context, filter *TransactionFilter) ([]*Transaction, error)
+
+	// Transaction returns the transaction matching the supplied hash.
+	Transaction(ctx context.Context, hash []byte) (*Transaction, error)
 }
 
 // TransactionsSetter defines functions to create and update transactions.

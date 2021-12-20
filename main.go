@@ -130,7 +130,7 @@ func fetchConfig() error {
 	pflag.Bool("blocks.transactions.balances.enable", true, "Enable fetching of balance change information (requires blocks and transactions to be enabled)")
 	pflag.Bool("blocks.transactions.storage.enable", true, "Enable fetching of storage change information (requires blocks and transactions to be enabled)")
 	pflag.String("blocks.style", "batch", "Use different blocks fetcher (available: batch, individual)")
-	pflag.Duration("blocks.interval", 30*time.Second, "Interval between updates")
+	pflag.Duration("blocks.interval", 10*time.Second, "Interval between updates")
 	pflag.Int32("blocks.start-height", -1, "Slot from which to start fetching blocks")
 	pflag.String("execclient.address", "", "Address for execution node JSON-RPC endpoint")
 	pflag.Duration("execclient.timeout", 60*time.Second, "Timeout for execution node requests")
