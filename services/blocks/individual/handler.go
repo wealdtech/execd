@@ -114,20 +114,9 @@ func (s *Service) handleBlockTransactions(ctx context.Context,
 	// Guess at initial capacity here...
 	dbEvents := make([]*execdb.Event, 0, len(block.London.Transactions)*4)
 	for i, transaction := range block.London.Transactions {
-		var dbTransaction *execdb.Transaction
-		switch tx := transaction.(type) {
-		case *spec.Type0Transaction:
-			dbTransaction = s.compileType0Transaction(ctx, block, tx, i)
-		case *spec.Type1Transaction:
-			dbTransaction = s.compileType1Transaction(ctx, block, tx, i)
-		case *spec.Type2Transaction:
-			dbTransaction = s.compileType2Transaction(ctx, block, tx, i)
-		default:
-			log.Warn().Uint64("type", transaction.Type()).Msg("Unhandled transaction type")
-			continue
-		}
+		dbTransaction := s.compileTransaction(ctx, block, transaction, i)
 
-		dbTxEvents, err := s.addTransactionReceiptInfo(ctx, dbTransaction)
+		dbTxEvents, err := s.addTransactionReceiptInfo(ctx, transaction, dbTransaction)
 		if err != nil {
 			return errors.Wrap(err, "failed to add receipt to transaction")
 		}
@@ -164,7 +153,7 @@ func (s *Service) handleBlockTransactions(ctx context.Context,
 				address := k
 				if stateDiff.Balance != nil {
 					dbBalanceChange := &execdb.TransactionBalanceChange{
-						TransactionHash: transactionResults.TransactionHash,
+						TransactionHash: transactionResults.TransactionHash[:],
 						BlockHeight:     block.London.Number,
 						Address:         address[:],
 						Old:             stateDiff.Balance.From,
@@ -177,7 +166,7 @@ func (s *Service) handleBlockTransactions(ctx context.Context,
 					for l, stateChange := range stateDiff.Storage {
 						storageHash := l
 						dbStorageChange := &execdb.TransactionStorageChange{
-							TransactionHash: transactionResults.TransactionHash,
+							TransactionHash: transactionResults.TransactionHash[:],
 							BlockHeight:     block.London.Number,
 							Address:         address[:],
 							StorageAddress:  storageHash[:],
@@ -198,9 +187,9 @@ func (s *Service) handleBlockTransactions(ctx context.Context,
 	return nil
 }
 
-func (s *Service) compileType0Transaction(ctx context.Context,
+func (s *Service) compileTransaction(ctx context.Context,
 	block *spec.Block,
-	tx *spec.Type0Transaction,
+	tx *spec.Transaction,
 	index int,
 ) *execdb.Transaction {
 	var to *[]byte
@@ -208,110 +197,48 @@ func (s *Service) compileType0Transaction(ctx context.Context,
 		tmp := tx.To[:]
 		to = &tmp
 	}
-	return &execdb.Transaction{
+	dbTransaction := &execdb.Transaction{
 		BlockHeight: block.London.Number,
 		BlockHash:   tx.BlockHash[:],
 		// ContractAddress comes from receipt.
 		Index:    uint32(index),
-		Type:     0,
+		Type:     tx.Type,
 		From:     tx.From[:],
 		GasLimit: tx.Gas,
-		GasPrice: &tx.GasPrice,
-		// Gas used comes from receipt.
-		Hash:  tx.Hash[:],
-		Input: tx.Input,
-		Nonce: tx.Nonce,
-		R:     tx.R,
-		S:     tx.S,
-		// Status comes from receipt.
-		To:    to,
-		V:     tx.V,
-		Value: tx.Value,
-	}
-}
-
-func (s *Service) compileType1Transaction(ctx context.Context,
-	block *spec.Block,
-	tx *spec.Type1Transaction,
-	index int,
-) *execdb.Transaction {
-	var to *[]byte
-	if tx.To != nil {
-		tmp := tx.To[:]
-		to = &tmp
-	}
-	accessList := make(map[string][][]byte)
-	for _, entry := range tx.AccessList {
-		accessList[fmt.Sprintf("%#x", entry.Address)] = entry.StorageKeys
-	}
-	return &execdb.Transaction{
-		AccessList:  accessList,
-		BlockHeight: block.London.Number,
-		BlockHash:   tx.BlockHash[:],
-		// ContractAddress comes from receipt.
-		Index:    uint32(index),
-		Type:     1,
-		From:     tx.From[:],
-		GasLimit: tx.Gas,
-		GasPrice: &tx.GasPrice,
-		// Gas used comes from receipt.
-		Hash:  tx.Hash[:],
-		Input: tx.Input,
-		Nonce: tx.Nonce,
-		R:     tx.R,
-		S:     tx.S,
-		// Status comes from receipt.
-		To:    to,
-		V:     tx.V,
-		Value: tx.Value,
-	}
-}
-
-func (s *Service) compileType2Transaction(ctx context.Context,
-	block *spec.Block,
-	tx *spec.Type2Transaction,
-	index int,
-) *execdb.Transaction {
-	var to *[]byte
-	if tx.To != nil {
-		tmp := tx.To[:]
-		to = &tmp
-	}
-	accessList := make(map[string][][]byte)
-	for _, entry := range tx.AccessList {
-		accessList[fmt.Sprintf("%#x", entry.Address)] = entry.StorageKeys
-	}
-	return &execdb.Transaction{
-		AccessList:  accessList,
-		BlockHeight: block.London.Number,
-		BlockHash:   tx.BlockHash[:],
-		// ContractAddress comes from receipt.
-		Index:    uint32(index),
-		Type:     2,
-		From:     tx.From[:],
-		GasLimit: tx.Gas,
+		GasPrice: tx.GasPrice,
 		Hash:     tx.Hash[:],
 		Input:    tx.Input,
 		// Gas used comes from receipt.
-		MaxFeePerGas:         &tx.MaxFeePerGas,
-		MaxPriorityFeePerGas: &tx.MaxPriorityFeePerGas,
-		Nonce:                tx.Nonce,
-		R:                    tx.R,
-		S:                    tx.S,
+		Nonce: tx.Nonce,
+		R:     tx.R,
+		S:     tx.S,
 		// Status comes from receipt.
 		To:    to,
 		V:     tx.V,
 		Value: tx.Value,
 	}
+	if tx.Type == 1 || tx.Type == 2 {
+		dbTransaction.AccessList = make(map[string][][]byte)
+		for _, entry := range tx.AccessList {
+			dbTransaction.AccessList[fmt.Sprintf("%x", entry.Address)] = entry.StorageKeys
+		}
+	}
+	if tx.Type == 2 {
+		dbTransaction.MaxFeePerGas = &tx.MaxFeePerGas
+		dbTransaction.MaxPriorityFeePerGas = &tx.MaxPriorityFeePerGas
+	}
+
+	return dbTransaction
 }
 
 func (s *Service) addTransactionReceiptInfo(ctx context.Context,
+	transaction *spec.Transaction,
 	dbTransaction *execdb.Transaction,
 ) (
 	[]*execdb.Event,
 	error,
 ) {
-	receipt, err := s.transactionReceiptsProvider.TransactionReceipt(ctx, dbTransaction.Hash)
+	receipt, err := s.transactionReceiptsProvider.TransactionReceipt(ctx, transaction.Hash)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to obtain transaction receipt")
 	}
@@ -320,7 +247,7 @@ func (s *Service) addTransactionReceiptInfo(ctx context.Context,
 		dbTransaction.Status = receipt.Status
 	}
 	if receipt.ContractAddress != nil {
-		tmp := receipt.To[:]
+		tmp := receipt.ContractAddress[:]
 		dbTransaction.ContractAddress = &tmp
 	}
 

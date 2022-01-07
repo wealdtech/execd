@@ -23,7 +23,7 @@
 
 ### Binaries
 
-Binaries for the latest version of `execd` can be obtained from [the releases page](https://github.com/wealdtech/execd/releases/latest  ).
+Binaries for the latest version of `execd` can be obtained from [the releases page](https://github.com/wealdtech/execd/releases/latest).
 
 ### Docker
 
@@ -55,7 +55,9 @@ createdb -E UTF8 --owner=exec exec
 ### Execution node
 `execd` supports Erigon consensus nodes.  The current state of obtaining data from consensus nodes is as follows:
 
-  - Erigon: must be run without pruning to allow `execd` to obtain historical data
+- Erigon:
+  - must be run without pruning to allow `execd` to obtain historical data
+  - must run the RPC daemon
 
 ## Upgrading `execd`
 `execd` should upgrade automatically from earlier versions.  Note that the upgrade process can take a long time to complete, especially where data needs to be refetched or recalculated.  `execd` should be left to complete the upgrade, to avoid the situation where additional fields are not fully populated.  If this does occur then `execd` can be run with the options `--blocks.start-height=0` to force `execd` to refetch all blocks, although note that it will commonly be faster to restart `execd` with a clean database in this situation.

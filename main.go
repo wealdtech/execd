@@ -43,12 +43,14 @@ import (
 	"github.com/wealdtech/execd/services/metrics"
 	nullmetrics "github.com/wealdtech/execd/services/metrics/null"
 	prometheusmetrics "github.com/wealdtech/execd/services/metrics/prometheus"
+	"github.com/wealdtech/execd/services/mev"
+	batchmev "github.com/wealdtech/execd/services/mev/batch"
 	standardscheduler "github.com/wealdtech/execd/services/scheduler/standard"
 	"github.com/wealdtech/execd/util"
 )
 
 // ReleaseVersion is the release version for the code.
-var ReleaseVersion = "0.2.0"
+var ReleaseVersion = "0.3.0"
 
 func main() {
 	os.Exit(main2())
@@ -130,8 +132,11 @@ func fetchConfig() error {
 	pflag.Bool("blocks.transactions.balances.enable", true, "Enable fetching of balance change information (requires blocks and transactions to be enabled)")
 	pflag.Bool("blocks.transactions.storage.enable", true, "Enable fetching of storage change information (requires blocks and transactions to be enabled)")
 	pflag.String("blocks.style", "batch", "Use different blocks fetcher (available: batch, individual)")
-	pflag.Duration("blocks.interval", 10*time.Second, "Interval between updates")
+	pflag.Duration("blocks.interval", 10*time.Second, "Interval between block updates")
 	pflag.Int32("blocks.start-height", -1, "Slot from which to start fetching blocks")
+	pflag.Bool("mev.enable", true, "Enable setting MEV-related information")
+	pflag.Int32("mev.start-height", -1, "Slot from which to start setting MEV information")
+	pflag.Duration("mev.interval", 10*time.Second, "Interval between MEV updates")
 	pflag.String("execclient.address", "", "Address for execution node JSON-RPC endpoint")
 	pflag.Duration("execclient.timeout", 60*time.Second, "Timeout for execution node requests")
 	pflag.Parse()
@@ -255,6 +260,11 @@ func startServices(ctx context.Context, monitor metrics.Service) error {
 	log.Trace().Msg("Starting blocks service")
 	if _, err := startBlocks(ctx, execClient, execDB, monitor); err != nil {
 		return errors.Wrap(err, "failed to start blocks service")
+	}
+
+	log.Trace().Msg("Starting MEV service")
+	if _, err := startMEV(ctx, execDB, monitor); err != nil {
+		return errors.Wrap(err, "failed to start MEV service")
 	}
 
 	return nil
@@ -412,6 +422,64 @@ func startBlocks(
 	}
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create blocks service")
+	}
+
+	return s, nil
+}
+
+func startMEV(
+	ctx context.Context,
+	execDB execdb.Service,
+	monitor metrics.Service,
+) (
+	blocks.Service,
+	error,
+) {
+	if !viper.GetBool("mev.enable") {
+		return nil, nil
+	}
+
+	scheduler, err := standardscheduler.New(ctx,
+		standardscheduler.WithLogLevel(util.LogLevel("scheduler")),
+		standardscheduler.WithMonitor(monitor),
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to start scheduler service")
+	}
+
+	blocksProvider, isProvider := execDB.(execdb.BlocksProvider)
+	if !isProvider {
+		return nil, errors.New("database does not provide blocks")
+	}
+	transactionsProvider, isProvider := execDB.(execdb.TransactionsProvider)
+	if !isProvider {
+		return nil, errors.New("database does not provide transactions")
+	}
+	transactionStateDiffsProvider, isProvider := execDB.(execdb.TransactionStateDiffsProvider)
+	if !isProvider {
+		return nil, errors.New("database does not provide transaction state diffs")
+	}
+	blockMEVsSetter, isSetter := execDB.(execdb.BlockMEVsSetter)
+	if !isSetter {
+		return nil, errors.New("database does not store MEV")
+	}
+
+	var s mev.Service
+
+	s, err = batchmev.New(ctx,
+		batchmev.WithLogLevel(util.LogLevel("mev")),
+		batchmev.WithMonitor(monitor),
+		batchmev.WithScheduler(scheduler),
+		batchmev.WithBlocksProvider(blocksProvider),
+		batchmev.WithTransactionsProvider(transactionsProvider),
+		batchmev.WithTransactionStateDiffsProvider(transactionStateDiffsProvider),
+		batchmev.WithBlockMEVsSetter(blockMEVsSetter),
+		batchmev.WithStartHeight(viper.GetInt64("mev.start-height")),
+		batchmev.WithProcessConcurrency(util.ProcessConcurrency("mev")),
+		batchmev.WithInterval(viper.GetDuration("mev.interval")),
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create mev service")
 	}
 
 	return s, nil

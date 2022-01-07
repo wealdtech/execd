@@ -15,6 +15,7 @@ package postgresql
 
 import (
 	"context"
+	"encoding/hex"
 
 	"github.com/pkg/errors"
 	"github.com/shopspring/decimal"
@@ -102,6 +103,35 @@ SET f_block_height = excluded.f_block_height
 		transaction.V.Bytes(),
 		decimal.NewFromBigInt(transaction.Value, 0),
 	)
+	if err != nil {
+		return err
+	}
 
+	for k, storageKeys := range transaction.AccessList {
+		address, err := hex.DecodeString(k)
+		if err != nil {
+			// N.B. this should never happen, as we control encoding of the access list.
+			return errors.Wrap(err, "failed to parse access list addredd")
+		}
+		_, err = tx.Exec(ctx, `
+INSERT INTO t_transaction_access_lists(f_transaction_hash
+                                      ,f_block_height
+                                      ,f_address
+                                      ,f_storage_keys
+                                      )
+VALUES($1,$2,$3,$4)
+ON CONFLICT (f_transaction_hash,f_block_height,f_address) DO
+UPDATE
+SET f_storage_keys = excluded.f_storage_keys
+`,
+			transaction.Hash,
+			transaction.BlockHeight,
+			address,
+			storageKeys,
+		)
+		if err != nil {
+			return err
+		}
+	}
 	return err
 }

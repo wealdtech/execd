@@ -32,6 +32,12 @@ type Service interface {
 	Metadata(ctx context.Context, key string) ([]byte, error)
 }
 
+// BlocksProvider defines functions to provide block information.
+type BlocksProvider interface {
+	// Blocks returns blocks matching the supplied filter.
+	Blocks(ctx context.Context, filter *BlockFilter) ([]*Block, error)
+}
+
 // BlocksSetter defines functions to create and update blocks.
 type BlocksSetter interface {
 	Service
@@ -40,6 +46,14 @@ type BlocksSetter interface {
 
 	// SetBlocks sets multiple blocks efficiently.
 	SetBlocks(ctx context.Context, blocks []*Block) error
+}
+
+// BlockMEVsSetter defines functions to create and update block MEV.
+type BlockMEVsSetter interface {
+	Service
+
+	// SetBlockMEVs sets multiple block MEVs efficiently.
+	SetBlockMEVs(ctx context.Context, blockMEVs []*BlockMEV) error
 }
 
 // EventsProvider defines functions to provide event information.
@@ -51,6 +65,7 @@ type EventsProvider interface {
 // EventsSetter defines functions to create and update events.
 type EventsSetter interface {
 	Service
+
 	// SetEvent sets an event.
 	SetEvent(ctx context.Context, event *Event) error
 
@@ -70,11 +85,18 @@ type TransactionsProvider interface {
 // TransactionsSetter defines functions to create and update transactions.
 type TransactionsSetter interface {
 	Service
+
 	// SetTransaction sets a transaction.
 	SetTransaction(ctx context.Context, transaction *Transaction) error
 
 	// SetTransactions sets multiple transactions efficiently.
 	SetTransactions(ctx context.Context, transactions []*Transaction) error
+}
+
+// TransactionStateDiffsProvider defines function to provide transaction state diff information.
+type TransactionStateDiffsProvider interface {
+	// TransactionStateDiff returns transaction state diffs for the supplied hash.
+	TransactionStateDiff(ctx context.Context, hash []byte) (*TransactionStateDiff, error)
 }
 
 // TransactionStateDiffsSetter defines functions to create and update state differences.

@@ -16,6 +16,8 @@ package execdb
 import (
 	"math/big"
 	"time"
+
+	"github.com/holiman/uint256"
 )
 
 // Block holds information about a block.
@@ -46,7 +48,7 @@ type Transaction struct {
 	Type                 uint64
 	From                 []byte
 	GasLimit             uint32
-	GasPrice             *uint64
+	GasPrice             uint64
 	GasUsed              uint32
 	Hash                 []byte
 	Input                []byte
@@ -59,6 +61,14 @@ type Transaction struct {
 	To                   *[]byte
 	V                    *big.Int
 	Value                *big.Int
+}
+
+// TransactionAccessListEntry holds information about a transaction access list.
+type TransactionAccessListEntry struct {
+	TransactionHash []byte
+	BlockHeight     uint32
+	Address         []byte
+	StorageKeys     [][]byte
 }
 
 // TransactionStateDiff holds information about state differences as a result of a transaction.
@@ -93,4 +103,12 @@ type Event struct {
 	Address         []byte
 	Topics          [][]byte
 	Data            []byte
+}
+
+// BlockMEV holds information about payments to the fee recipient in a block.
+type BlockMEV struct {
+	BlockHash   []byte
+	BlockHeight uint32
+	Fees        *uint256.Int
+	Payments    *uint256.Int
 }

@@ -24,16 +24,17 @@ type schemaMetadata struct {
 	Version uint64 `json:"version"`
 }
 
-var currentVersion = uint64(1)
+var currentVersion = uint64(2)
 
 type upgrade struct {
 	funcs []func(context.Context, *Service) error
 }
 
 var upgrades = map[uint64]*upgrade{
-	1: {
+	2: {
 		funcs: []func(context.Context, *Service) error{
-			// addAttestationsVoteFields,
+			addBlockMEV,
+			addTransactionAccessLists,
 		},
 	},
 }
@@ -268,6 +269,17 @@ CREATE UNIQUE INDEX i_transactions_1 ON t_transactions(f_block_hash,f_index);
 CREATE INDEX i_transactions_2 ON t_transactions(f_from,f_block_height);
 CREATE INDEX i_transactions_3 ON t_transactions(f_to,f_block_height);
 CREATE INDEX i_transactions_4 ON t_transactions(f_block_height);
+CREATE INDEX i_transactions_5 ON t_transactions(f_hash);
+
+CREATE TABLE t_transaction_access_lists (
+  f_transaction_hash BYTEA NOT NULL
+ ,f_block_height     INTEGER NOT NULL
+ ,f_address          BYTEA NOT NULL
+ ,f_storage_keys     BYTEA[] NOT NULL
+);
+CREATE UNIQUE INDEX i_transaction_access_lists_1 ON t_transaction_access_lists(f_transaction_hash,f_block_height,f_address);
+CREATE INDEX i_transaction_access_lists_2 ON t_transaction_access_lists(f_address);
+CREATE INDEX i_transaction_access_lists_3 ON t_transaction_access_lists(f_block_height);
 
 -- t_transaction_balance_changes contains balance changes as a result of a transaction.
 CREATE TABLE t_transaction_balance_changes (
@@ -305,6 +317,16 @@ CREATE TABLE t_events (
 CREATE UNIQUE INDEX i_events_1 ON t_events(f_transaction_hash,f_block_height,f_index);
 CREATE INDEX i_events_2 ON t_events(f_address);
 CREATE INDEX i_events_3 ON t_events(f_block_height);
+
+-- t_block_mevs contains block MEV.
+CREATE TABLE t_block_mevs (
+  f_block_hash   BYTEA NOT NULL REFERENCES t_blocks(f_hash) ON DELETE CASCADE
+ ,f_block_height INTEGER NOT NULL
+ ,f_fees         NUMERIC NOT NULL
+ ,f_payments     NUMERIC NOT NULL
+);
+CREATE UNIQUE INDEX i_block_mevs_1 ON t_block_mevs(f_block_hash);
+CREATE INDEX i_block_mevs_2 ON t_block_mevs(f_block_height);
 `); err != nil {
 		cancel()
 		return errors.Wrap(err, "failed to create initial tables")
@@ -315,5 +337,90 @@ CREATE INDEX i_events_3 ON t_events(f_block_height);
 		return errors.Wrap(err, "failed to commit initial tables transaction")
 	}
 
+	return nil
+}
+
+// addBlockMEV creates the t_block_mevs table.
+func addBlockMEV(ctx context.Context, s *Service) error {
+	tx := s.tx(ctx)
+	if tx == nil {
+		return ErrNoTransaction
+	}
+
+	tableExists, err := s.tableExists(ctx, "t_block_mevs")
+	if err != nil {
+		return errors.Wrap(err, "failed to check presence of t_block_mevs")
+	}
+	if tableExists {
+		return nil
+	}
+
+	if _, err := tx.Exec(ctx, `
+CREATE TABLE t_block_mevs (
+  f_block_hash   BYTEA NOT NULL REFERENCES t_blocks(f_hash) ON DELETE CASCADE
+ ,f_block_height INTEGER NOT NULL
+ ,f_fees         NUMERIC NOT NULL
+ ,f_payments     NUMERIC NOT NULL
+)`); err != nil {
+		return errors.Wrap(err, "failed to create t_block_mevs")
+	}
+
+	if _, err := tx.Exec(ctx, `
+CREATE UNIQUE INDEX i_block_mevs_1 ON t_block_mevs(f_block_hash)
+`); err != nil {
+		return errors.Wrap(err, "failed to create i_block_mevs_1")
+	}
+
+	if _, err := tx.Exec(ctx, `
+CREATE INDEX i_block_mevs_2 ON t_block_mevs(f_block_height);
+`); err != nil {
+		return errors.Wrap(err, "failed to create i_block_mevs_2")
+	}
+
+	return nil
+}
+
+// addTransactionAccessLists creates the t_transaction_access_lists table.
+func addTransactionAccessLists(ctx context.Context, s *Service) error {
+	tx := s.tx(ctx)
+	if tx == nil {
+		return ErrNoTransaction
+	}
+
+	tableExists, err := s.tableExists(ctx, "t_transaction_access_lists")
+	if err != nil {
+		return errors.Wrap(err, "failed to check presence of t_transaction_access_lists")
+	}
+	if tableExists {
+		return nil
+	}
+
+	if _, err := tx.Exec(ctx, `
+CREATE TABLE t_transaction_access_lists (
+  f_transaction_hash BYTEA NOT NULL
+ ,f_block_height     INTEGER NOT NULL
+ ,f_address          BYTEA NOT NULL
+ ,f_storage_keys     BYTEA[] NOT NULL
+)`); err != nil {
+		return errors.Wrap(err, "failed to create t_transaction_access_lists")
+	}
+
+	if _, err := tx.Exec(ctx, `
+CREATE UNIQUE INDEX i_transaction_access_lists_1 ON t_transaction_access_lists(f_transaction_hash,f_block_height,f_address);
+`); err != nil {
+		return errors.Wrap(err, "failed to create i_transaction_access_lists_1")
+	}
+
+	if _, err := tx.Exec(ctx, `
+CREATE INDEX i_transaction_access_lists_2 ON t_transaction_access_lists(f_address);
+`); err != nil {
+		return errors.Wrap(err, "failed to create i_transaction_access_lists_2")
+	}
+
+	if _, err := tx.Exec(ctx, `
+CREATE INDEX i_transaction_access_lists_3 ON t_transaction_access_lists(f_block_height);
+`); err != nil {
+		return errors.Wrap(err, "failed to create i_transaction_access_lists_3")
+	}
 	return nil
 }

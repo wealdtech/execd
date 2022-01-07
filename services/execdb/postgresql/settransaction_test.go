@@ -57,7 +57,7 @@ func TestSetTransaction(t *testing.T) {
 				Type:                 2,
 				From:                 byteArray("0x000102030405060708090a0b0c0d0e0f10111213"),
 				GasLimit:             100000,
-				GasPrice:             &gasPrice,
+				GasPrice:             gasPrice,
 				GasUsed:              21000,
 				Hash:                 byteArray("0x100102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"),
 				Input:                []byte{},
