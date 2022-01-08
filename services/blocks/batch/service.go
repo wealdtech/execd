@@ -135,6 +135,7 @@ func (s *Service) updateOnScheduleTick(ctx context.Context, data interface{}) {
 	md, err := s.getMetadata(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to obtain metadata for update")
+		return
 	}
 
 	log.Trace().Int64("height", md.LatestHeight).Msg("Catching up from slot")
