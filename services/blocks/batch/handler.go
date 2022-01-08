@@ -1,4 +1,4 @@
-// Copyright © 2021 Weald Technology Trading.
+// Copyright © 2021, 2022 Weald Technology Trading.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -25,6 +25,13 @@ import (
 	"go.uber.org/atomic"
 	"golang.org/x/sync/semaphore"
 )
+
+type batchData struct {
+	blocks       []*execdb.Block
+	transactions []*execdb.Transaction
+	events       []*execdb.Event
+	stateDiffs   []*execdb.TransactionStateDiff
+}
 
 func (s *Service) catchup(ctx context.Context, md *metadata) {
 	chainHeight, err := s.chainHeightProvider.ChainHeight(ctx)
@@ -59,10 +66,14 @@ func (s *Service) catchup(ctx context.Context, md *metadata) {
 		for i := uint32(0); i < entries; i++ {
 			blockHeights[i] = height + i
 		}
-		blocks := make([]*execdb.Block, entries)
-		transactionsMap := make(map[uint32][]*execdb.Transaction)
-		eventsMap := make(map[uint32][]*execdb.Event)
-		stateDiffsMap := make(map[uint32][]*execdb.TransactionStateDiff)
+
+		bd := &batchData{
+			blocks:       make([]*execdb.Block, entries),
+			transactions: make([]*execdb.Transaction, 0),
+			events:       make([]*execdb.Event, 0),
+			stateDiffs:   make([]*execdb.TransactionStateDiff, 0),
+		}
+
 		if _, err = util.Scatter(int(entries), int(s.processConcurrency), func(offset int, entries int, mu *sync.RWMutex) (interface{}, error) {
 			for i := offset; i < offset+entries; i++ {
 				log.Trace().Uint32("height", blockHeights[i]).Msg("Fetching block")
@@ -70,7 +81,7 @@ func (s *Service) catchup(ctx context.Context, md *metadata) {
 				if err != nil {
 					return nil, err
 				}
-				if err := s.handleBlock(ctx, md, mu, blocks, i, transactionsMap, eventsMap, stateDiffsMap, block); err != nil {
+				if err := s.handleBlock(ctx, md, mu, bd, i, block); err != nil {
 					return nil, err
 				}
 			}
@@ -80,35 +91,18 @@ func (s *Service) catchup(ctx context.Context, md *metadata) {
 			return
 		}
 
-		// Turn maps in to arrays.
-		transactions := make([]*execdb.Transaction, 0)
-		for _, v := range transactionsMap {
-			transactions = append(transactions, v...)
-		}
-		events := make([]*execdb.Event, 0)
-		for _, v := range eventsMap {
-			events = append(events, v...)
-		}
-		stateDiffs := make([]*execdb.TransactionStateDiff, 0)
-		for _, v := range stateDiffsMap {
-			stateDiffs = append(stateDiffs, v...)
-		}
-
 		if err := writeSem.Acquire(ctx, 1); err != nil {
 			log.Error().Err(err).Msg("Failed to acquire write semaphore")
 		}
 		go func(ctx context.Context,
 			md *metadata,
-			blocks []*execdb.Block,
-			transactions []*execdb.Transaction,
-			events []*execdb.Event,
-			stateDiffs []*execdb.TransactionStateDiff,
+			bd *batchData,
 		) {
 			if storeFailed.Load() {
 				return
 			}
-			log.Trace().Int("blocks", len(blocks)).Int("transaction", len(transactions)).Int("events", len(events)).Int("state_diffs", len(stateDiffs)).Msg("Items to store")
-			if err := s.store(ctx, md, blocks, transactions, events, stateDiffs); err != nil {
+			log.Trace().Int("blocks", len(bd.blocks)).Int("transaction", len(bd.transactions)).Int("events", len(bd.events)).Int("state_diffs", len(bd.stateDiffs)).Msg("Items to store")
+			if err := s.store(ctx, md, bd); err != nil {
 				log.Error().Err(err).Msg("Failed to store")
 				storeFailed.Store(true)
 				writeSem.Release(1)
@@ -116,18 +110,15 @@ func (s *Service) catchup(ctx context.Context, md *metadata) {
 			}
 			log.Trace().Msg("Stored")
 			writeSem.Release(1)
-		}(ctx, md, blocks, transactions, events, stateDiffs)
+		}(ctx, md, bd)
 	}
 }
 
 func (s *Service) handleBlock(ctx context.Context,
 	md *metadata,
 	mu *sync.RWMutex,
-	blocks []*execdb.Block,
+	bd *batchData,
 	blockOffset int,
-	transactions map[uint32][]*execdb.Transaction,
-	events map[uint32][]*execdb.Event,
-	stateDiffs map[uint32][]*execdb.TransactionStateDiff,
 	block *spec.Block,
 ) error {
 	dbBlock := &execdb.Block{
@@ -160,10 +151,10 @@ func (s *Service) handleBlock(ctx context.Context,
 	}
 
 	mu.Lock()
-	blocks[blockOffset] = dbBlock
-	transactions[dbBlock.Height] = dbTransactions
-	events[dbBlock.Height] = dbEvents
-	stateDiffs[dbBlock.Height] = dbStateDiffs
+	bd.blocks[blockOffset] = dbBlock
+	bd.transactions = append(bd.transactions, dbTransactions...)
+	bd.events = append(bd.events, dbEvents...)
+	bd.stateDiffs = append(bd.stateDiffs, dbStateDiffs...)
 	mu.Unlock()
 
 	return nil
@@ -323,37 +314,34 @@ func (s *Service) addTransactionReceiptInfo(ctx context.Context,
 
 func (s *Service) store(ctx context.Context,
 	md *metadata,
-	blocks []*execdb.Block,
-	transactions []*execdb.Transaction,
-	events []*execdb.Event,
-	stateDiffs []*execdb.TransactionStateDiff,
+	bd *batchData,
 ) error {
 	ctx, cancel, err := s.blocksSetter.BeginTx(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to begin transaction")
 	}
 
-	if err := s.blocksSetter.SetBlocks(ctx, blocks); err != nil {
+	if err := s.blocksSetter.SetBlocks(ctx, bd.blocks); err != nil {
 		cancel()
 		return errors.Wrap(err, "failed to set blocks")
 	}
 
-	if err := s.transactionsSetter.SetTransactions(ctx, transactions); err != nil {
+	if err := s.transactionsSetter.SetTransactions(ctx, bd.transactions); err != nil {
 		cancel()
 		return errors.Wrap(err, "failed to set transactions")
 	}
 
-	if err := s.eventsSetter.SetEvents(ctx, events); err != nil {
+	if err := s.eventsSetter.SetEvents(ctx, bd.events); err != nil {
 		cancel()
 		return errors.Wrap(err, "failed to set events")
 	}
 
-	if err := s.transactionStateDiffsSetter.SetTransactionStateDiffs(ctx, stateDiffs); err != nil {
+	if err := s.transactionStateDiffsSetter.SetTransactionStateDiffs(ctx, bd.stateDiffs); err != nil {
 		cancel()
 		return errors.Wrap(err, "failed to set state diffs")
 	}
 
-	md.LatestHeight = int64(blocks[len(blocks)-1].Height)
+	md.LatestHeight = int64(bd.blocks[len(bd.blocks)-1].Height)
 	if err := s.setMetadata(ctx, md); err != nil {
 		cancel()
 		return errors.Wrap(err, "failed to set metadata")
@@ -364,7 +352,7 @@ func (s *Service) store(ctx context.Context,
 		return errors.Wrap(err, "failed to commit transaction")
 	}
 
-	monitorBlockProcessed(blocks[len(blocks)-1].Height)
+	monitorBlockProcessed(bd.blocks[len(bd.blocks)-1].Height)
 
 	return nil
 }
