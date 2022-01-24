@@ -72,6 +72,11 @@ func (s *Service) Transactions(ctx context.Context, filter *execdb.TransactionFi
 	return nil, nil
 }
 
+// Transaction is a mock.
+func (s *Service) Transaction(ctx context.Context, hash []byte) (*execdb.Transaction, error) {
+	return nil, nil
+}
+
 // SetTransaction is a mock.
 func (s *Service) SetTransaction(ctx context.Context, transaction *execdb.Transaction) error {
 	return nil

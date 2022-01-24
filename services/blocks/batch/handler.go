@@ -147,7 +147,7 @@ func (s *Service) handleBlock(ctx context.Context,
 
 	dbTransactions, dbEvents, dbStateDiffs, err := s.fetchBlockTransactions(ctx, block)
 	if err != nil {
-		return errors.Wrap(err, "failed to fetch block transactions")
+		return errors.Wrap(err, fmt.Sprintf("failed to fetch transactions for block %#x", block.London.Hash))
 	}
 
 	mu.Lock()
@@ -176,7 +176,7 @@ func (s *Service) fetchBlockTransactions(ctx context.Context,
 
 		dbTxEvents, err := s.addTransactionReceiptInfo(ctx, transaction, dbTransaction)
 		if err != nil {
-			return nil, nil, nil, errors.Wrap(err, "failed to add receipt to transaction")
+			return nil, nil, nil, errors.Wrap(err, fmt.Sprintf("failed to add receipt to transaction %#x", transaction.Hash))
 		}
 
 		dbTransactions = append(dbTransactions, dbTransaction)
