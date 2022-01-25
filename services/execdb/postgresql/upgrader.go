@@ -1,4 +1,4 @@
-// Copyright © 2021 Weald Technology Trading.
+// Copyright © 2021, 2022 Weald Technology Trading.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -16,6 +16,7 @@ package postgresql
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/pkg/errors"
 )
@@ -24,7 +25,7 @@ type schemaMetadata struct {
 	Version uint64 `json:"version"`
 }
 
-var currentVersion = uint64(2)
+var currentVersion = uint64(4)
 
 type upgrade struct {
 	funcs []func(context.Context, *Service) error
@@ -35,6 +36,16 @@ var upgrades = map[uint64]*upgrade{
 		funcs: []func(context.Context, *Service) error{
 			addBlockMEV,
 			addTransactionAccessLists,
+		},
+	},
+	3: {
+		funcs: []func(context.Context, *Service) error{
+			addForeignKeys,
+		},
+	},
+	4: {
+		funcs: []func(context.Context, *Service) error{
+			fixGasPrice,
 		},
 	},
 }
@@ -251,7 +262,7 @@ CREATE TABLE t_transactions (
  ,f_type                     BIGINT NOT NULL
  ,f_from                     BYTEA NOT NULL
  ,f_gas_limit                INTEGER NOT NULL
- ,f_gas_price                BIGINT
+ ,f_gas_price                BIGINT NOT NULL
  ,f_gas_used                 INTEGER NOT NULL
  ,f_hash                     BYTEA NOT NULL
  ,f_input                    BYTEA
@@ -269,10 +280,10 @@ CREATE UNIQUE INDEX i_transactions_1 ON t_transactions(f_block_hash,f_index);
 CREATE INDEX i_transactions_2 ON t_transactions(f_from,f_block_height);
 CREATE INDEX i_transactions_3 ON t_transactions(f_to,f_block_height);
 CREATE INDEX i_transactions_4 ON t_transactions(f_block_height);
-CREATE INDEX i_transactions_5 ON t_transactions(f_hash);
+CREATE UNIQUE INDEX i_transactions_5 ON t_transactions(f_hash);
 
 CREATE TABLE t_transaction_access_lists (
-  f_transaction_hash BYTEA NOT NULL
+  f_transaction_hash BYTEA NOT NULL REFERENCES t_transactions(f_hash) ON DELETE CASCADE
  ,f_block_height     INTEGER NOT NULL
  ,f_address          BYTEA NOT NULL
  ,f_storage_keys     BYTEA[] NOT NULL
@@ -283,7 +294,7 @@ CREATE INDEX i_transaction_access_lists_3 ON t_transaction_access_lists(f_block_
 
 -- t_transaction_balance_changes contains balance changes as a result of a transaction.
 CREATE TABLE t_transaction_balance_changes (
-  f_transaction_hash BYTEA NOT NULL
+  f_transaction_hash BYTEA NOT NULL REFERENCES t_transactions(f_hash) ON DELETE CASCADE
  ,f_block_height     INTEGER NOT NULL
  ,f_address          BYTEA NOT NULL
  ,f_old              NUMERIC NOT NULL
@@ -307,7 +318,7 @@ CREATE INDEX i_transaction_storage_changes_3 ON t_transaction_storage_changes(f_
 
 -- t_events contains execution layer events.
 CREATE TABLE t_events (
-  f_transaction_hash BYTEA NOT NULL
+  f_transaction_hash BYTEA NOT NULL REFERENCES t_transactions(f_hash) ON DELETE CASCADE
  ,f_block_height     INTEGER NOT NULL
  ,f_index            INTEGER NOT NULL
  ,f_address          BYTEA NOT NULL
@@ -422,5 +433,143 @@ CREATE INDEX i_transaction_access_lists_3 ON t_transaction_access_lists(f_block_
 `); err != nil {
 		return errors.Wrap(err, "failed to create i_transaction_access_lists_3")
 	}
+	return nil
+}
+
+// addForeignKeys adds foreign keys to relevant tables.
+func addForeignKeys(ctx context.Context, s *Service) error {
+	tx := s.tx(ctx)
+	if tx == nil {
+		return ErrNoTransaction
+	}
+
+	// Need a unique index on transactions first.
+	_, err := tx.Exec(ctx, `
+DROP INDEX IF EXISTS i_transactions_5`)
+	if err != nil {
+		return errors.Wrap(err, "failed to drop i_transactions_5")
+	}
+
+	_, err = tx.Exec(ctx, `
+CREATE UNIQUE INDEX i_transactions_5 ON t_transactions(f_hash)`)
+	if err != nil {
+		return errors.Wrap(err, "failed to create i_transactions_5")
+	}
+
+	_, err = tx.Exec(ctx, `
+ALTER TABLE t_events
+ADD CONSTRAINT t_events_f_transaction_hash_fkey
+  FOREIGN KEY (f_transaction_hash)
+  REFERENCES t_transactions(f_hash)
+  ON DELETE CASCADE`)
+	if err != nil {
+		return errors.Wrap(err, "failed to set foreign key for t_events")
+	}
+
+	_, err = tx.Exec(ctx, `
+ALTER TABLE t_transaction_access_lists
+ADD CONSTRAINT t_transaction_access_lists_f_transaction_hash_fkey
+  FOREIGN KEY (f_transaction_hash)
+  REFERENCES t_transactions(f_hash)
+  ON DELETE CASCADE`)
+	if err != nil {
+		return errors.Wrap(err, "failed to set foreign key for t_transaction_access_lists")
+	}
+
+	_, err = tx.Exec(ctx, `
+ALTER TABLE t_transaction_balance_changes
+ADD CONSTRAINT t_transaction_balance_changes_f_transaction_hash_fkey
+  FOREIGN KEY (f_transaction_hash)
+  REFERENCES t_transactions(f_hash)
+  ON DELETE CASCADE`)
+	if err != nil {
+		return errors.Wrap(err, "failed to set foreign key for t_transaction_balance_changes")
+	}
+
+	_, err = tx.Exec(ctx, `
+ALTER TABLE t_transaction_storage_changes
+ADD CONSTRAINT t_transaction_storage_changes_f_transaction_hash_fkey
+  FOREIGN KEY (f_transaction_hash)
+  REFERENCES t_transactions(f_hash)
+  ON DELETE CASCADE`)
+	if err != nil {
+		return errors.Wrap(err, "failed to set foreign key for t_transaction_storage_changes")
+	}
+
+	return nil
+}
+
+// fixGasPrice fixes the f_gas_price column in the t_transactions table.
+func fixGasPrice(ctx context.Context, s *Service) error {
+	tx := s.tx(ctx)
+	if tx == nil {
+		return ErrNoTransaction
+	}
+
+	// Fetch the minimum height.
+	minHeight := uint64(0)
+	err := tx.QueryRow(ctx, `
+SELECT COALESCE(MIN(f_block_height),999999999)
+FROM t_transactions
+WHERE f_type = 2
+  AND f_gas_price IS NULL`,
+	).Scan(
+		&minHeight,
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to obtain minimum block height")
+	}
+
+	// Fetch the maximum height.
+	maxHeight := uint64(0)
+	err = tx.QueryRow(ctx, `
+SELECT COALESCE(MAX(f_height),0)
+FROM t_blocks`,
+	).Scan(
+		&maxHeight,
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to obtain maximum block height")
+	}
+
+	for height := minHeight; height <= maxHeight; height++ {
+		log.Trace().Uint64("block_height", height).Msg("Fixing gas price for transactions in block")
+		// Obtain the base fee for the block.
+		baseFee := uint64(0)
+		if err := tx.QueryRow(ctx, `
+SELECT f_base_fee
+FROM t_blocks
+WHERE f_height = $1`,
+			height,
+		).Scan(
+			&baseFee,
+		); err != nil {
+			return errors.Wrap(err, fmt.Sprintf("failed to obtain base fee for block %d", height))
+		}
+
+		// Update the gas price for the type 2 transactions in the block.
+		_, err := tx.Exec(ctx, `
+UPDATE t_transactions
+SET f_gas_price = LEAST(f_max_priority_fee_per_gas, f_max_fee_per_gas - $1) + $1
+WHERE f_block_height = $2
+  AND f_type = 2
+  AND f_gas_price IS NULL`,
+			baseFee,
+			height,
+		)
+		if err != nil {
+			return errors.Wrap(err, fmt.Sprintf("failed to obtain base fee for block %d", height))
+		}
+	}
+
+	// Add the 'not null' constraint to the gas price column.
+	_, err = tx.Exec(ctx, `
+ALTER TABLE t_transactions
+ALTER COLUMN f_gas_price
+SET NOT NULL`)
+	if err != nil {
+		return errors.Wrap(err, "failed to set f_gas_price to not null")
+	}
+
 	return nil
 }
