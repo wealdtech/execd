@@ -41,6 +41,8 @@ func (s *Service) catchup(ctx context.Context, md *metadata) {
 	maxHeight := blocks[0].Height
 	log.Trace().Uint32("max_height", maxHeight).Msg("Update parameters")
 
+	zero := big.NewInt(0)
+
 	// Calculate total fees and total bribes for each block, writing out in a batch.
 	batchSize := 512
 	blockMEVs := make([]*execdb.BlockMEV, 0, 512)
@@ -70,17 +72,16 @@ func (s *Service) catchup(ctx context.Context, md *metadata) {
 			return
 		}
 		for _, transaction := range transactions {
-			var feePerGas uint64
+			var feePerGas *uint256.Int
 			if transaction.Type == 2 {
-				feePerGas = *transaction.MaxPriorityFeePerGas
+				feePerGas = uint256.NewInt(*transaction.MaxPriorityFeePerGas)
 				if *transaction.MaxPriorityFeePerGas > *transaction.MaxFeePerGas-block.BaseFee {
-					feePerGas = *transaction.MaxFeePerGas - block.BaseFee
+					feePerGas = uint256.NewInt(*transaction.MaxFeePerGas - block.BaseFee)
 				}
 			} else {
-				feePerGas = transaction.GasPrice
+				feePerGas = uint256.NewInt(transaction.GasPrice - block.BaseFee)
 			}
-			fees := uint256.NewInt(feePerGas)
-			fees = fees.Mul(fees, uint256.NewInt(uint64(transaction.GasUsed)))
+			fees := feePerGas.Mul(feePerGas, uint256.NewInt(uint64(transaction.GasUsed)))
 			blockFees.Add(blockFees, fees)
 
 			transactionStateDiff, err := s.transactionStateDiffsProvider.TransactionStateDiff(ctx, transaction.Hash)
@@ -88,10 +89,12 @@ func (s *Service) catchup(ctx context.Context, md *metadata) {
 				log.Error().Err(err).Uint32("height", height).Msg("Failed to obtain transaction state diff")
 				return
 			}
+
 			for _, balanceChange := range transactionStateDiff.BalanceChanges {
 				if bytes.Equal(balanceChange.Address, block.FeeRecipient) {
 					delta := new(big.Int).Sub(new(big.Int).Sub(balanceChange.New, balanceChange.Old), fees.ToBig())
-					if delta.Cmp(big.NewInt(0)) > 0 {
+					if delta.Cmp(zero) > 0 {
+						// There was a direct payment to the miner as well as the transaction fee.
 						d, overflow := uint256.FromBig(delta)
 						if overflow {
 							log.Error().Msg("Overflow")
