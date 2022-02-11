@@ -41,7 +41,7 @@ INSERT INTO t_block_mevs(f_block_hash
 VALUES($1,$2,$3,$4)
 ON CONFLICT (f_block_hash) DO
 UPDATE
-SET f_height = excluded.f_height
+SET f_block_height = excluded.f_block_height
    ,f_fees = excluded.f_fees
    ,f_payments = excluded.f_payments
 `,
