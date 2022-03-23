@@ -14,18 +14,18 @@
 package postgresql
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/pkg/errors"
-	"github.com/shopspring/decimal"
 	"github.com/wealdtech/execd/services/execdb"
 )
 
-// Blocks returns blocks matching the supplied filter.
-func (s *Service) Blocks(ctx context.Context, filter *execdb.BlockFilter) ([]*execdb.Block, error) {
+// Balances returns balances matching the supplied filter.
+func (s *Service) Balances(ctx context.Context, filter *execdb.BalanceFilter) ([]*execdb.Balance, error) {
 	tx := s.tx(ctx)
 	if tx == nil {
 		ctx, cancel, err := s.BeginTx(ctx)
@@ -41,50 +41,54 @@ func (s *Service) Blocks(ctx context.Context, filter *execdb.BlockFilter) ([]*ex
 	queryVals := make([]interface{}, 0)
 
 	queryBuilder.WriteString(`
-SELECT f_height
-      ,f_hash
-      ,f_base_fee
-      ,f_difficulty
-      ,f_extra_data
-      ,f_gas_limit
-      ,f_gas_used
-      ,f_fee_recipient
-      ,f_parent_hash
-      ,f_size
-      ,f_state_root
-      ,f_timestamp
-      ,f_total_difficulty
-      ,f_issuance
-FROM t_blocks`)
+SELECT f_address
+      ,f_currency
+      ,f_from
+      ,f_amount
+FROM t_balances`)
 
 	wherestr := "WHERE"
+
+	if len(filter.Holders) > 0 {
+		queryVals = append(queryVals, filter.Holders)
+		queryBuilder.WriteString(fmt.Sprintf(`
+%s f_address = ANY($%d)`, wherestr, len(queryVals)))
+		wherestr = "  AND"
+	}
+
+	if filter.Currency != "" {
+		queryVals = append(queryVals, filter.Currency)
+		queryBuilder.WriteString(fmt.Sprintf(`
+%s f_currency = $%d`, wherestr, len(queryVals)))
+		wherestr = "  AND"
+	}
 
 	if filter.From != nil {
 		queryVals = append(queryVals, *filter.From)
 		queryBuilder.WriteString(fmt.Sprintf(`
-%s f_height >= $%d`, wherestr, len(queryVals)))
+%s f_from >= $%d`, wherestr, len(queryVals)))
 		wherestr = "  AND"
 	}
 
 	if filter.To != nil {
 		queryVals = append(queryVals, *filter.To)
 		queryBuilder.WriteString(fmt.Sprintf(`
-%s f_height <= $%d`, wherestr, len(queryVals)))
+%s f_from <= $%d`, wherestr, len(queryVals)))
 	}
 
 	switch filter.Order {
 	case execdb.OrderEarliest:
 		queryBuilder.WriteString(`
-ORDER BY f_height`)
+ORDER BY f_from`)
 	case execdb.OrderLatest:
 		queryBuilder.WriteString(`
-ORDER BY f_height DESC`)
+ORDER BY f_from DESC`)
 	default:
 		return nil, errors.New("no order specified")
 	}
 
-	if filter.Limit != nil {
-		queryVals = append(queryVals, *filter.Limit)
+	if filter.Limit > 0 {
+		queryVals = append(queryVals, filter.Limit)
 		queryBuilder.WriteString(fmt.Sprintf(`
 LIMIT $%d`, len(queryVals)))
 	}
@@ -98,40 +102,34 @@ LIMIT $%d`, len(queryVals)))
 	}
 	defer rows.Close()
 
-	blocks := make([]*execdb.Block, 0)
-	var totalDifficulty decimal.Decimal
-	var issuance decimal.NullDecimal
+	balances := make([]*execdb.Balance, 0)
 	for rows.Next() {
-		block := &execdb.Block{}
+		balance := &execdb.Balance{}
+		address := make([]byte, 20)
 		err := rows.Scan(
-			&block.Height,
-			&block.Hash,
-			&block.BaseFee,
-			&block.Difficulty,
-			&block.ExtraData,
-			&block.GasLimit,
-			&block.GasUsed,
-			&block.FeeRecipient,
-			&block.ParentHash,
-			&block.Size,
-			&block.StateRoot,
-			&block.Timestamp,
-			&totalDifficulty,
-			&issuance,
+			&address,
+			&balance.Currency,
+			&balance.From,
+			&balance.Amount,
 		)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to scan row")
 		}
-		block.TotalDifficulty = totalDifficulty.BigInt()
-		if issuance.Valid {
-			block.Issuance = issuance.Decimal.BigInt()
-		}
-		blocks = append(blocks, block)
+		copy(balance.Address[:], address)
+		balances = append(balances, balance)
 	}
 
-	// Always return in order of height.
-	sort.Slice(blocks, func(i int, j int) bool {
-		return blocks[i].Height < blocks[j].Height
+	// Always return in order of holder/currency/timstamp.
+	sort.Slice(balances, func(i int, j int) bool {
+		order := bytes.Compare(balances[i].Address[:], balances[j].Address[:])
+		if order != 0 {
+			return order < 0
+		}
+		order = strings.Compare(balances[i].Currency, balances[j].Currency)
+		if order != 0 {
+			return order < 0
+		}
+		return balances[i].From.Unix() < balances[j].From.Unix()
 	})
-	return blocks, nil
+	return balances, nil
 }

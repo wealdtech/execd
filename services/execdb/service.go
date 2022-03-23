@@ -1,4 +1,4 @@
-// Copyright © 2021 Weald Technology Trading.
+// Copyright © 2021, 2022 Weald Technology Trading.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -30,6 +30,22 @@ type Service interface {
 
 	// Metadata obtains the JSON value from a metadata key.
 	Metadata(ctx context.Context, key string) ([]byte, error)
+}
+
+// BalancesProvider defines functions to provide balance information.
+type BalancesProvider interface {
+	// Balances returns balances matching the supplied filter.
+	Balances(ctx context.Context, filter *BalanceFilter) ([]*Balance, error)
+}
+
+// BalancesSetter defines functions to create and update balances.
+type BalancesSetter interface {
+	Service
+	// SetBalance sets a balance.
+	SetBalance(ctx context.Context, balance *Balance) error
+
+	// SetBalances sets multiple balances efficiently.
+	SetBalances(ctx context.Context, balances []*Balance) error
 }
 
 // BlocksProvider defines functions to provide block information.

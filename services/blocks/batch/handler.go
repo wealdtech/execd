@@ -121,24 +121,28 @@ func (s *Service) handleBlock(ctx context.Context,
 	blockOffset int,
 	block *spec.Block,
 ) error {
+	hash := block.Hash()
+	feeRecipient := block.FeeRecipient()
+	parentHash := block.ParentHash()
+	stateRoot := block.StateRoot()
 	dbBlock := &execdb.Block{
-		Height:          block.London.Number,
-		Hash:            block.London.Hash[:],
-		BaseFee:         block.London.BaseFeePerGas,
-		Difficulty:      block.London.Difficulty,
-		ExtraData:       block.London.ExtraData,
-		GasLimit:        block.London.GasLimit,
-		GasUsed:         block.London.GasUsed,
-		FeeRecipient:    block.London.Miner[:],
-		ParentHash:      block.London.ParentHash[:],
-		Size:            block.London.Size,
-		StateRoot:       block.London.StateRoot[:],
-		Timestamp:       block.London.Timestamp,
-		TotalDifficulty: block.London.TotalDifficulty,
+		Height:          block.Number(),
+		Hash:            hash[:],
+		BaseFee:         block.BaseFeePerGas(),
+		Difficulty:      block.Difficulty(),
+		ExtraData:       block.ExtraData(),
+		GasLimit:        block.GasLimit(),
+		GasUsed:         block.GasUsed(),
+		FeeRecipient:    feeRecipient[:],
+		ParentHash:      parentHash[:],
+		Size:            block.Size(),
+		StateRoot:       stateRoot[:],
+		Timestamp:       block.Timestamp(),
+		TotalDifficulty: block.TotalDifficulty(),
 	}
 
 	if s.issuanceProvider != nil {
-		issuance, err := s.issuanceProvider.Issuance(ctx, fmt.Sprintf("%d", block.London.Number))
+		issuance, err := s.issuanceProvider.Issuance(ctx, fmt.Sprintf("%d", block.Number()))
 		if err != nil {
 			return err
 		}
@@ -147,7 +151,7 @@ func (s *Service) handleBlock(ctx context.Context,
 
 	dbTransactions, dbEvents, dbStateDiffs, err := s.fetchBlockTransactions(ctx, block)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("failed to fetch transactions for block %#x", block.London.Hash))
+		return errors.Wrap(err, fmt.Sprintf("failed to fetch transactions for block %#x", block.Hash()))
 	}
 
 	mu.Lock()
@@ -168,15 +172,15 @@ func (s *Service) fetchBlockTransactions(ctx context.Context,
 	[]*execdb.TransactionStateDiff,
 	error,
 ) {
-	dbTransactions := make([]*execdb.Transaction, 0, len(block.London.Transactions))
+	dbTransactions := make([]*execdb.Transaction, 0, len(block.Transactions()))
 	// Guess at initial capacity here...
-	dbEvents := make([]*execdb.Event, 0, len(block.London.Transactions)*4)
-	for i, transaction := range block.London.Transactions {
+	dbEvents := make([]*execdb.Event, 0, len(block.Transactions())*4)
+	for i, transaction := range block.Transactions() {
 		dbTransaction := s.compileTransaction(ctx, block, transaction, i)
 
 		dbTxEvents, err := s.addTransactionReceiptInfo(ctx, transaction, dbTransaction)
 		if err != nil {
-			return nil, nil, nil, errors.Wrap(err, fmt.Sprintf("failed to add receipt to transaction %#x", transaction.Hash))
+			return nil, nil, nil, errors.Wrap(err, fmt.Sprintf("failed to add receipt to transaction %#x", transaction.Hash()))
 		}
 
 		dbTransactions = append(dbTransactions, dbTransaction)
@@ -184,9 +188,9 @@ func (s *Service) fetchBlockTransactions(ctx context.Context,
 	}
 
 	// Guess at initial capacity here...
-	dbStateDiffs := make([]*execdb.TransactionStateDiff, 0, len(block.London.Transactions)*4)
+	dbStateDiffs := make([]*execdb.TransactionStateDiff, 0, len(block.Transactions())*4)
 	if s.enableBalanceChanges || s.enableStorageChanges {
-		transactionsResults, err := s.blockReplaysProvider.ReplayBlockTransactions(ctx, fmt.Sprintf("%d", block.London.Number))
+		transactionsResults, err := s.blockReplaysProvider.ReplayBlockTransactions(ctx, fmt.Sprintf("%d", block.Number()))
 		if err != nil {
 			return nil, nil, nil, errors.Wrap(err, "failed to replay block")
 		}
@@ -200,7 +204,7 @@ func (s *Service) fetchBlockTransactions(ctx context.Context,
 				if s.enableBalanceChanges && stateDiff.Balance != nil {
 					dbBalanceChange := &execdb.TransactionBalanceChange{
 						TransactionHash: transactionResults.TransactionHash[:],
-						BlockHeight:     block.London.Number,
+						BlockHeight:     block.Number(),
 						Address:         address[:],
 						Old:             stateDiff.Balance.From,
 						New:             stateDiff.Balance.To,
@@ -213,7 +217,7 @@ func (s *Service) fetchBlockTransactions(ctx context.Context,
 						storageHash := l
 						dbStorageChange := &execdb.TransactionStorageChange{
 							TransactionHash: transactionResults.TransactionHash[:],
-							BlockHeight:     block.London.Number,
+							BlockHeight:     block.Number(),
 							Address:         address[:],
 							StorageAddress:  storageHash[:],
 							Value:           stateChange.To,
@@ -235,39 +239,52 @@ func (s *Service) compileTransaction(ctx context.Context,
 	index int,
 ) *execdb.Transaction {
 	var to *[]byte
-	if tx.To != nil {
-		tmp := tx.To[:]
-		to = &tmp
+	if tx.To() != nil {
+		tmp := tx.To()
+		tmpp := tmp[:]
+		to = &tmpp
 	}
+
+	blockHash := tx.BlockHash()
+	from := tx.From()
+	hash := tx.Hash()
 	dbTransaction := &execdb.Transaction{
-		BlockHeight: block.London.Number,
-		BlockHash:   tx.BlockHash[:],
+		BlockHeight: block.Number(),
+		BlockHash:   blockHash[:],
 		// ContractAddress comes from receipt.
 		Index:    uint32(index),
-		Type:     tx.Type,
-		From:     tx.From[:],
-		GasLimit: tx.Gas,
-		GasPrice: tx.GasPrice,
-		Hash:     tx.Hash[:],
-		Input:    tx.Input,
+		Type:     uint64(tx.Type),
+		From:     from[:],
+		GasLimit: tx.Gas(),
+		GasPrice: tx.GasPrice(),
+		Hash:     hash[:],
+		Input:    tx.Input(),
 		// Gas used comes from receipt.
-		Nonce: tx.Nonce,
-		R:     tx.R,
-		S:     tx.S,
+		Nonce: tx.Nonce(),
+		R:     tx.R(),
+		S:     tx.S(),
 		// Status comes from receipt.
 		To:    to,
-		V:     tx.V,
-		Value: tx.Value,
+		V:     tx.V(),
+		Value: tx.Value(),
 	}
 	if tx.Type == 1 || tx.Type == 2 {
 		dbTransaction.AccessList = make(map[string][][]byte)
-		for _, entry := range tx.AccessList {
+		for _, entry := range tx.AccessList() {
 			dbTransaction.AccessList[fmt.Sprintf("%x", entry.Address)] = entry.StorageKeys
 		}
 	}
 	if tx.Type == 2 {
-		dbTransaction.MaxFeePerGas = &tx.MaxFeePerGas
-		dbTransaction.MaxPriorityFeePerGas = &tx.MaxPriorityFeePerGas
+		maxFeePerGas := tx.MaxFeePerGas()
+		dbTransaction.MaxFeePerGas = &maxFeePerGas
+		maxPriorityFeePerGas := tx.MaxPriorityFeePerGas()
+		dbTransaction.MaxPriorityFeePerGas = &maxPriorityFeePerGas
+		// Calculate the gas price.
+		feePerGas := maxPriorityFeePerGas
+		if maxPriorityFeePerGas > maxFeePerGas-block.BaseFeePerGas() {
+			feePerGas = maxFeePerGas - block.BaseFeePerGas()
+		}
+		dbTransaction.GasPrice = feePerGas
 	}
 
 	return dbTransaction
@@ -280,7 +297,7 @@ func (s *Service) addTransactionReceiptInfo(ctx context.Context,
 	[]*execdb.Event,
 	error,
 ) {
-	receipt, err := s.transactionReceiptsProvider.TransactionReceipt(ctx, transaction.Hash)
+	receipt, err := s.transactionReceiptsProvider.TransactionReceipt(ctx, transaction.Hash())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to obtain transaction receipt")
 	}
