@@ -13,6 +13,10 @@
 
 package execdb
 
+import (
+	"time"
+)
+
 // Order is the order in which results should be fetched (N.B. fetched, not returned).
 type Order uint8
 
@@ -22,6 +26,37 @@ const (
 	// OrderLatest fetches latest transactions first.
 	OrderLatest
 )
+
+// BalanceFilter defines a filter for fetching balances.
+// Filter elements are ANDed together.
+// Results are always returned in ascending holder/timestamp/currency order.
+type BalanceFilter struct {
+	// Limit is the maximum number of balances to return.
+	// If 0 then there is no limit.
+	Limit uint32
+
+	// Order is either OrderEarliest, in which case the earliest results
+	// that match the filter are returned, or OrderLatest, in which case the
+	// latest results that match the filter are returned.
+	// The default is OrderEarliest.
+	Order Order
+
+	// Currency is the currency to fetch.
+	// If nil then there is no currency filter
+	Currency string
+
+	// From is the timestamp of the earliest balance to fetch.
+	// If nil then there is no earliest balance.
+	From *time.Time
+
+	// To is the timestamp of the latest balance to fetch.
+	// If nil then there is no latest balance.
+	To *time.Time
+
+	// Holders are the holders of the balance.
+	// If nil then no filter is applied.
+	Holders [][]byte
+}
 
 // TransactionFilter defines a filter for fetching transactions.
 // Filter elements are ANDed together.

@@ -15,6 +15,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"time"
@@ -30,11 +31,14 @@ import (
 	"syscall"
 
 	execclient "github.com/attestantio/go-execution-client"
+	"github.com/attestantio/go-execution-client/types"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	zerologger "github.com/rs/zerolog/log"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
+	"github.com/wealdtech/execd/services/balances"
+	batchbalances "github.com/wealdtech/execd/services/balances/batch"
 	"github.com/wealdtech/execd/services/blocks"
 	batchblocks "github.com/wealdtech/execd/services/blocks/batch"
 	individualblocks "github.com/wealdtech/execd/services/blocks/individual"
@@ -45,12 +49,13 @@ import (
 	prometheusmetrics "github.com/wealdtech/execd/services/metrics/prometheus"
 	"github.com/wealdtech/execd/services/mev"
 	batchmev "github.com/wealdtech/execd/services/mev/batch"
+	"github.com/wealdtech/execd/services/scheduler"
 	standardscheduler "github.com/wealdtech/execd/services/scheduler/standard"
 	"github.com/wealdtech/execd/util"
 )
 
 // ReleaseVersion is the release version for the code.
-var ReleaseVersion = "0.3.5"
+var ReleaseVersion = "0.4.0"
 
 func main() {
 	os.Exit(main2())
@@ -134,6 +139,10 @@ func fetchConfig() error {
 	pflag.String("blocks.style", "batch", "Use different blocks fetcher (available: batch, individual)")
 	pflag.Duration("blocks.interval", 10*time.Second, "Interval between block updates")
 	pflag.Int32("blocks.start-height", -1, "Slot from which to start fetching blocks")
+	pflag.Bool("balances.enable", true, "Enable fetching of balance-related information")
+	pflag.Int32("balances.start-height", -1, "Slot from which to start fetching balances")
+	pflag.String("balances.style", "batch", "Use different balances fetcher (available: batch)")
+	pflag.Duration("balances.interval", 10*time.Second, "Interval between balance updates")
 	pflag.Bool("mev.enable", true, "Enable setting MEV-related information")
 	pflag.Int32("mev.start-height", -1, "Slot from which to start setting MEV information")
 	pflag.Duration("mev.interval", 10*time.Second, "Interval between MEV updates")
@@ -257,9 +266,22 @@ func startServices(ctx context.Context, monitor metrics.Service) error {
 		break
 	}
 
+	scheduler, err := standardscheduler.New(ctx,
+		standardscheduler.WithLogLevel(util.LogLevel("scheduler")),
+		standardscheduler.WithMonitor(monitor),
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to start scheduler service")
+	}
+
 	log.Trace().Msg("Starting blocks service")
-	if _, err := startBlocks(ctx, execClient, execDB, monitor); err != nil {
+	if _, err := startBlocks(ctx, execClient, execDB, monitor, scheduler); err != nil {
 		return errors.Wrap(err, "failed to start blocks service")
+	}
+
+	log.Trace().Msg("Starting balances service")
+	if _, err := startBalances(ctx, execClient, execDB, monitor, scheduler); err != nil {
+		return errors.Wrap(err, "failed to start balances service")
 	}
 
 	log.Trace().Msg("Starting MEV service")
@@ -307,6 +329,7 @@ func startBlocks(
 	execClient execclient.Service,
 	execDB execdb.Service,
 	monitor metrics.Service,
+	scheduler scheduler.Service,
 ) (
 	blocks.Service,
 	error,
@@ -315,13 +338,7 @@ func startBlocks(
 		return nil, nil
 	}
 
-	scheduler, err := standardscheduler.New(ctx,
-		standardscheduler.WithLogLevel(util.LogLevel("scheduler")),
-		standardscheduler.WithMonitor(monitor),
-	)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to start scheduler service")
-	}
+	var err error
 
 	if viper.GetString("blocks.execclient.address") != "" {
 		execClient, err = fetchClient(ctx, viper.GetString("blocks.execclient.address"))
@@ -348,6 +365,7 @@ func startBlocks(
 		_, err := issuanceProvider.Issuance(ctx, "1")
 		if err != nil {
 			// It can't, remove the provider.
+			log.Trace().Err(err).Msg("Failed to obtain test issuance")
 			issuanceProvider = nil
 		}
 	}
@@ -418,10 +436,99 @@ func startBlocks(
 			batchblocks.WithInterval(viper.GetDuration("blocks.interval")),
 		)
 	default:
-		return nil, errors.New("unknown blocks stylw")
+		return nil, errors.New("unknown blocks style")
 	}
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create blocks service")
+	}
+
+	return s, nil
+}
+
+func startBalances(
+	ctx context.Context,
+	execClient execclient.Service,
+	execDB execdb.Service,
+	monitor metrics.Service,
+	scheduler scheduler.Service,
+) (
+	blocks.Service,
+	error,
+) {
+	if !viper.GetBool("balances.enable") {
+		return nil, nil
+	}
+
+	var err error
+
+	if viper.GetString("balances.execclient.address") != "" {
+		execClient, err = fetchClient(ctx, viper.GetString("balances.execclient.address"))
+		if err != nil {
+			return nil, errors.Wrap(err, fmt.Sprintf("failed to fetch client %q", viper.GetString("balances.execclient.address")))
+		}
+	}
+
+	chainHeightProvider, isProvider := execClient.(execclient.ChainHeightProvider)
+	if !isProvider {
+		return nil, errors.New("client does not provide chain height")
+	}
+	blocksProvider, isProvider := execClient.(execclient.BlocksProvider)
+	if !isProvider {
+		return nil, errors.New("client does not provide blocks")
+	}
+	balancesProvider, isProvider := execClient.(execclient.BalancesProvider)
+	if !isProvider {
+		return nil, errors.New("client does not provide balances")
+	}
+	balancesSetter, isSetter := execDB.(execdb.BalancesSetter)
+	if !isSetter {
+		return nil, errors.New("database does not store balances")
+	}
+	dbBalancesProvider, isProvider := execDB.(execdb.BalancesProvider)
+	if !isProvider {
+		return nil, errors.New("database does not provide balances")
+	}
+
+	if len(viper.GetStringSlice("balances.addresses")) == 0 {
+		log.Warn().Msg("Balances module enabled but no balance supplied")
+		// Not an error, but the end of our setup.
+		return nil, nil
+	}
+
+	addresses := make([]types.Address, len(viper.GetStringSlice("balances.addresses")))
+	for i, str := range viper.GetStringSlice("balances.addresses") {
+		tmp, err := hex.DecodeString(strings.TrimPrefix(str, "0x"))
+		if err != nil {
+			return nil, errors.Wrap(err, "invalid address")
+		}
+		copy(addresses[i][:], tmp)
+	}
+
+	var s balances.Service
+	switch viper.GetString("balances.style") {
+	case "individual":
+		return nil, errors.New("individual balances module not implemented")
+	case "batch":
+		s, err = batchbalances.New(ctx,
+			batchbalances.WithLogLevel(util.LogLevel("balances")),
+			batchbalances.WithMonitor(monitor),
+			batchbalances.WithScheduler(scheduler),
+			batchbalances.WithChainHeightProvider(chainHeightProvider),
+			batchbalances.WithBalancesProvider(balancesProvider),
+			batchbalances.WithBlocksProvider(blocksProvider),
+			batchbalances.WithBalancesSetter(balancesSetter),
+			batchbalances.WithDBBalancesProvider(dbBalancesProvider),
+			batchbalances.WithAddresses(addresses),
+			batchbalances.WithStartHeight(viper.GetInt64("balances.start-height")),
+			batchbalances.WithProcessConcurrency(util.ProcessConcurrency("balances")),
+			batchbalances.WithInterval(viper.GetDuration("balances.interval")),
+			batchbalances.WithInterval(viper.GetDuration("balances.interval")),
+		)
+	default:
+		return nil, errors.New("unknown balances style")
+	}
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create balances service")
 	}
 
 	return s, nil

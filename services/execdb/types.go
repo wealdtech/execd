@@ -17,8 +17,18 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/attestantio/go-execution-client/types"
 	"github.com/holiman/uint256"
+	"github.com/shopspring/decimal"
 )
+
+// Balance holds information about a balance.
+type Balance struct {
+	Address  types.Address
+	Currency string
+	Amount   decimal.Decimal
+	From     time.Time
+}
 
 // Block holds information about a block.
 type Block struct {

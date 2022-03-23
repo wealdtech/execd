@@ -25,7 +25,7 @@ type schemaMetadata struct {
 	Version uint64 `json:"version"`
 }
 
-var currentVersion = uint64(4)
+var currentVersion = uint64(5)
 
 type upgrade struct {
 	funcs []func(context.Context, *Service) error
@@ -46,6 +46,11 @@ var upgrades = map[uint64]*upgrade{
 	4: {
 		funcs: []func(context.Context, *Service) error{
 			fixGasPrice,
+		},
+	},
+	5: {
+		funcs: []func(context.Context, *Service) error{
+			addBalancesTable,
 		},
 	},
 }
@@ -231,7 +236,7 @@ CREATE TABLE t_metadata (
  ,f_value JSONB NOT NULL
 );
 CREATE UNIQUE INDEX i_metadata_1 ON t_metadata(f_key);
-INSERT INTO t_metadata VALUES('schema', '{"version": 1}');
+INSERT INTO t_metadata VALUES('schema', '{"version": 5}');
 
 -- t_blocks contains execution layer blocks.
 CREATE TABLE t_blocks (
@@ -338,6 +343,16 @@ CREATE TABLE t_block_mevs (
 );
 CREATE UNIQUE INDEX i_block_mevs_1 ON t_block_mevs(f_block_hash);
 CREATE INDEX i_block_mevs_2 ON t_block_mevs(f_block_height);
+
+-- t_balances contains balances on addresses.
+CREATE TABLE t_balances (
+  f_address  BYTEA NOT NULL
+ ,f_currency BYTEA NOT NULL
+ ,f_from     TIMESTAMPTZ NOT NULL
+ ,f_amount   NUMERIC NOT NULL
+);
+CREATE UNIQUE INDEX i_balances_1 ON t_balances(f_address,f_currency,f_from);
+
 `); err != nil {
 		cancel()
 		return errors.Wrap(err, "failed to create initial tables")
@@ -443,17 +458,33 @@ func addForeignKeys(ctx context.Context, s *Service) error {
 		return ErrNoTransaction
 	}
 
-	// Need a unique index on transactions first.
-	_, err := tx.Exec(ctx, `
-DROP INDEX IF EXISTS i_transactions_5`)
+	// See if we need to fix the transactions index.
+	var goodIndices uint64
+	err := tx.QueryRow(ctx, `
+SELECT COUNT(*)
+FROM pg_indexes
+WHERE indexname = 'i_transactions_5'
+  AND indexdef LIKE '%UNIQUE%'
+`).Scan(
+		&goodIndices,
+	)
 	if err != nil {
-		return errors.Wrap(err, "failed to drop i_transactions_5")
+		return errors.Wrap(err, "failed to obtain transactions index  information")
 	}
+	log.Trace().Uint64("good_indices", goodIndices).Msg("Found number of good indices")
+	if goodIndices == 0 {
+		// Need to fix the index.
+		_, err := tx.Exec(ctx, `
+DROP INDEX IF EXISTS i_transactions_5`)
+		if err != nil {
+			return errors.Wrap(err, "failed to drop i_transactions_5")
+		}
 
-	_, err = tx.Exec(ctx, `
+		_, err = tx.Exec(ctx, `
 CREATE UNIQUE INDEX i_transactions_5 ON t_transactions(f_hash)`)
-	if err != nil {
-		return errors.Wrap(err, "failed to create i_transactions_5")
+		if err != nil {
+			return errors.Wrap(err, "failed to create i_transactions_5")
+		}
 	}
 
 	_, err = tx.Exec(ctx, `
@@ -569,6 +600,40 @@ ALTER COLUMN f_gas_price
 SET NOT NULL`)
 	if err != nil {
 		return errors.Wrap(err, "failed to set f_gas_price to not null")
+	}
+
+	return nil
+}
+
+// addBalancesTable adds the t_balances table.
+func addBalancesTable(ctx context.Context, s *Service) error {
+	tx := s.tx(ctx)
+	if tx == nil {
+		return ErrNoTransaction
+	}
+
+	tableExists, err := s.tableExists(ctx, "t_balances")
+	if err != nil {
+		return errors.Wrap(err, "failed to check presence of t_balances")
+	}
+	if tableExists {
+		return nil
+	}
+
+	if _, err := tx.Exec(ctx, `
+CREATE TABLE t_balances (
+  f_address  BYTEA NOT NULL
+ ,f_currency BYTEA NOT NULL
+ ,f_from     TIMESTAMPTZ NOT NULL
+ ,f_amount   NUMERIC NOT NULL
+)`); err != nil {
+		return errors.Wrap(err, "failed to create t_balances")
+	}
+
+	if _, err := tx.Exec(ctx, `
+CREATE UNIQUE INDEX i_balances_1 ON t_balances(f_address,f_currency,f_from);
+`); err != nil {
+		return errors.Wrap(err, "failed to create i_balances_1")
 	}
 
 	return nil

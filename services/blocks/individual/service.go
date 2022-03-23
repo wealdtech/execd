@@ -109,8 +109,8 @@ func (s *Service) updateOnRestart(ctx context.Context, startHeight int64) {
 	}
 
 	if err := s.scheduler.SchedulePeriodicJob(ctx,
-		"class",
-		"name",
+		"Updates",
+		"Block updates",
 		runtimeFunc,
 		nil,
 		s.updateOnScheduleTick,

@@ -21,6 +21,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/attestantio/go-execution-client/types"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 	"github.com/wealdtech/execd/services/execdb"
@@ -37,6 +38,17 @@ func addressPtr(input string) *[]byte {
 		panic(err)
 	}
 	return &res
+}
+
+func address(input string) types.Address {
+	tmp, err := hex.DecodeString(strings.TrimPrefix(input, "0x"))
+	if err != nil {
+		panic(err)
+	}
+
+	res := types.Address{}
+	copy(res[:], tmp)
+	return res
 }
 
 func TestTransactions(t *testing.T) {
