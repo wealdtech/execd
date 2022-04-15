@@ -1,4 +1,4 @@
-// Copyright © 2021 Weald Technology Trading.
+// Copyright © 2021, 2022 Weald Technology Trading.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -22,8 +22,8 @@ import (
 	"github.com/wealdtech/execd/services/execdb"
 )
 
-// SetBlockMEVs sets multiple block MEVs efficiently.
-func (s *Service) SetBlockMEVs(ctx context.Context, blockMEVs []*execdb.BlockMEV) error {
+// SetBlockRewards sets multiple block rewards efficiently.
+func (s *Service) SetBlockRewards(ctx context.Context, rewards []*execdb.BlockReward) error {
 	tx := s.tx(ctx)
 	if tx == nil {
 		return ErrNoTransaction
@@ -36,19 +36,19 @@ func (s *Service) SetBlockMEVs(ctx context.Context, blockMEVs []*execdb.BlockMEV
 	}
 
 	_, err = nestedTx.CopyFrom(ctx,
-		pgx.Identifier{"t_block_mevs"},
+		pgx.Identifier{"t_block_rewards"},
 		[]string{
 			"f_block_hash",
 			"f_block_height",
 			"f_fees",
 			"f_payments",
 		},
-		pgx.CopyFromSlice(len(blockMEVs), func(i int) ([]interface{}, error) {
+		pgx.CopyFromSlice(len(rewards), func(i int) ([]interface{}, error) {
 			return []interface{}{
-				blockMEVs[i].BlockHash,
-				blockMEVs[i].BlockHeight,
-				decimal.NewFromBigInt(blockMEVs[i].Fees.ToBig(), 0),
-				decimal.NewFromBigInt(blockMEVs[i].Payments.ToBig(), 0),
+				rewards[i].BlockHash,
+				rewards[i].BlockHeight,
+				decimal.NewFromBigInt(rewards[i].Fees.ToBig(), 0),
+				decimal.NewFromBigInt(rewards[i].Payments.ToBig(), 0),
 			}, nil
 		}))
 
@@ -62,8 +62,8 @@ func (s *Service) SetBlockMEVs(ctx context.Context, blockMEVs []*execdb.BlockMEV
 		}
 
 		log.Debug().Err(err).Msg("Failed to copy insert blocks; applying one at a time")
-		for _, blockMEV := range blockMEVs {
-			if err := s.SetBlockMEV(ctx, blockMEV); err != nil {
+		for _, reward := range rewards {
+			if err := s.SetBlockReward(ctx, reward); err != nil {
 				return err
 			}
 		}

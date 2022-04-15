@@ -31,7 +31,7 @@ type Service struct {
 	blocksProvider                execdb.BlocksProvider
 	transactionsProvider          execdb.TransactionsProvider
 	transactionStateDiffsProvider execdb.TransactionStateDiffsProvider
-	blockMEVsSetter               execdb.BlockMEVsSetter
+	blockRewardsSetter            execdb.BlockRewardsSetter
 	processConcurrency            int64
 	interval                      time.Duration
 	activitySem                   *semaphore.Weighted
@@ -48,7 +48,7 @@ func New(ctx context.Context, params ...Parameter) (*Service, error) {
 	}
 
 	// Set logging.
-	log = zerologger.With().Str("service", "mev").Str("impl", "batch").Logger().Level(parameters.logLevel)
+	log = zerologger.With().Str("service", "blockrewards").Str("impl", "batch").Logger().Level(parameters.logLevel)
 
 	if err := registerMetrics(ctx, parameters.monitor); err != nil {
 		return nil, errors.New("failed to register metrics")
@@ -59,7 +59,7 @@ func New(ctx context.Context, params ...Parameter) (*Service, error) {
 		blocksProvider:                parameters.blocksProvider,
 		transactionsProvider:          parameters.transactionsProvider,
 		transactionStateDiffsProvider: parameters.transactionStateDiffsProvider,
-		blockMEVsSetter:               parameters.blockMEVsSetter,
+		blockRewardsSetter:            parameters.blockRewardsSetter,
 		processConcurrency:            parameters.processConcurrency,
 		interval:                      parameters.interval,
 		activitySem:                   semaphore.NewWeighted(1),
@@ -93,13 +93,13 @@ func (s *Service) updateOnRestart(ctx context.Context, startHeight int64) {
 
 	if err := s.scheduler.SchedulePeriodicJob(ctx,
 		"update",
-		"Update MEV",
+		"Update block rewards",
 		runtimeFunc,
 		nil,
 		s.updateOnScheduleTick,
 		nil,
 	); err != nil {
-		log.Fatal().Err(err).Msg("Failed to schedule MEV updates.")
+		log.Fatal().Err(err).Msg("Failed to schedule block rewards updates.")
 	}
 }
 

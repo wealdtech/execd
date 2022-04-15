@@ -25,7 +25,7 @@ type schemaMetadata struct {
 	Version uint64 `json:"version"`
 }
 
-var currentVersion = uint64(5)
+var currentVersion = uint64(6)
 
 type upgrade struct {
 	funcs []func(context.Context, *Service) error
@@ -51,6 +51,11 @@ var upgrades = map[uint64]*upgrade{
 	5: {
 		funcs: []func(context.Context, *Service) error{
 			addBalancesTable,
+		},
+	},
+	6: {
+		funcs: []func(context.Context, *Service) error{
+			renameBlockRewards,
 		},
 	},
 }
@@ -334,8 +339,8 @@ CREATE UNIQUE INDEX i_events_1 ON t_events(f_transaction_hash,f_block_height,f_i
 CREATE INDEX i_events_2 ON t_events(f_address);
 CREATE INDEX i_events_3 ON t_events(f_block_height);
 
--- t_block_mevs contains block MEV.
-CREATE TABLE t_block_mevs (
+-- t_block_rewards contains block rewards.
+CREATE TABLE t_block_rewards (
   f_block_hash   BYTEA NOT NULL REFERENCES t_blocks(f_hash) ON DELETE CASCADE
  ,f_block_height INTEGER NOT NULL
  ,f_fees         NUMERIC NOT NULL
@@ -634,6 +639,53 @@ CREATE TABLE t_balances (
 CREATE UNIQUE INDEX i_balances_1 ON t_balances(f_address,f_currency,f_from);
 `); err != nil {
 		return errors.Wrap(err, "failed to create i_balances_1")
+	}
+
+	return nil
+}
+
+// renameBlockRewards renames the t_block_rewards table.
+func renameBlockRewards(ctx context.Context, s *Service) error {
+	tx := s.tx(ctx)
+	if tx == nil {
+		return ErrNoTransaction
+	}
+
+	tableExists, err := s.tableExists(ctx, "t_block_mevs")
+	if err != nil {
+		return errors.Wrap(err, "failed to check presence of t_block_mevs")
+	}
+	if !tableExists {
+		return nil
+	}
+
+	if _, err := tx.Exec(ctx, `
+ALTER TABLE t_block_mevs
+RENAME TO t_block_rewards
+`); err != nil {
+		return errors.Wrap(err, "failed to rename t_block_mevs")
+	}
+
+	if _, err := tx.Exec(ctx, `
+ALTER INDEX i_block_mevs_1
+RENAME TO i_block_rewards_1
+`); err != nil {
+		return errors.Wrap(err, "failed to rename i_block_mevs_1")
+	}
+
+	if _, err := tx.Exec(ctx, `
+ALTER INDEX i_block_mevs_2
+RENAME TO i_block_rewards_2
+`); err != nil {
+		return errors.Wrap(err, "failed to rename i_block_mevs_2")
+	}
+
+	if _, err := tx.Exec(ctx, `
+UPDATE t_metadata
+SET f_key = 'rewards'
+WHERE f_key = 'mev'
+`); err != nil {
+		return errors.Wrap(err, "failed to rename metadata key")
 	}
 
 	return nil

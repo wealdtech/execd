@@ -1,4 +1,4 @@
-// Copyright © 2021 Weald Technology Trading.
+// Copyright © 2021, 2022 Weald Technology Trading.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -45,7 +45,7 @@ func (s *Service) catchup(ctx context.Context, md *metadata) {
 
 	// Calculate total fees and total bribes for each block, writing out in a batch.
 	batchSize := 512
-	blockMEVs := make([]*execdb.BlockMEV, 0, 512)
+	blockRewards := make([]*execdb.BlockReward, 0, 512)
 	for height := uint32(md.LatestHeight + 1); height <= maxHeight; height++ {
 		blockFees := uint256.NewInt(0)
 		blockPayments := uint256.NewInt(0)
@@ -107,25 +107,25 @@ func (s *Service) catchup(ctx context.Context, md *metadata) {
 			}
 		}
 
-		blockMEVs = append(blockMEVs, &execdb.BlockMEV{
+		blockRewards = append(blockRewards, &execdb.BlockReward{
 			BlockHash:   block.Hash,
 			BlockHeight: block.Height,
 			Fees:        blockFees,
 			Payments:    blockPayments,
 		})
 
-		if len(blockMEVs) == batchSize {
-			if err := s.store(ctx, md, blockMEVs); err != nil {
-				log.Error().Err(err).Msg("Failed to store MEVs")
+		if len(blockRewards) == batchSize {
+			if err := s.store(ctx, md, blockRewards); err != nil {
+				log.Error().Err(err).Msg("Failed to store rewards")
 				return
 			}
 			log.Trace().Uint32("height", height).Msg("Batch store")
-			blockMEVs = blockMEVs[:0]
+			blockRewards = blockRewards[:0]
 		}
 	}
-	if len(blockMEVs) > 0 {
-		if err := s.store(ctx, md, blockMEVs); err != nil {
-			log.Error().Err(err).Msg("Failed to store final MEVs")
+	if len(blockRewards) > 0 {
+		if err := s.store(ctx, md, blockRewards); err != nil {
+			log.Error().Err(err).Msg("Failed to store final rewards")
 			return
 		}
 	}
@@ -133,30 +133,30 @@ func (s *Service) catchup(ctx context.Context, md *metadata) {
 
 func (s *Service) store(ctx context.Context,
 	md *metadata,
-	blockMEVs []*execdb.BlockMEV,
+	blockRewards []*execdb.BlockReward,
 ) error {
-	ctx, cancel, err := s.blockMEVsSetter.BeginTx(ctx)
+	ctx, cancel, err := s.blockRewardsSetter.BeginTx(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to begin transaction")
 	}
 
-	if err := s.blockMEVsSetter.SetBlockMEVs(ctx, blockMEVs); err != nil {
+	if err := s.blockRewardsSetter.SetBlockRewards(ctx, blockRewards); err != nil {
 		cancel()
-		return errors.Wrap(err, "failed to set MEVs")
+		return errors.Wrap(err, "failed to set rewards")
 	}
 
-	md.LatestHeight = int64(blockMEVs[len(blockMEVs)-1].BlockHeight)
+	md.LatestHeight = int64(blockRewards[len(blockRewards)-1].BlockHeight)
 	if err := s.setMetadata(ctx, md); err != nil {
 		cancel()
 		return errors.Wrap(err, "failed to set metadata")
 	}
 
-	if err := s.blockMEVsSetter.CommitTx(ctx); err != nil {
+	if err := s.blockRewardsSetter.CommitTx(ctx); err != nil {
 		cancel()
 		return errors.Wrap(err, "failed to commit transaction")
 	}
 
-	monitorBlockProcessed(blockMEVs[len(blockMEVs)-1].BlockHeight)
+	monitorBlockProcessed(blockRewards[len(blockRewards)-1].BlockHeight)
 
 	return nil
 }

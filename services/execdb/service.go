@@ -64,12 +64,12 @@ type BlocksSetter interface {
 	SetBlocks(ctx context.Context, blocks []*Block) error
 }
 
-// BlockMEVsSetter defines functions to create and update block MEV.
-type BlockMEVsSetter interface {
+// BlockRewardsSetter defines functions to create and update block rewards.
+type BlockRewardsSetter interface {
 	Service
 
-	// SetBlockMEVs sets multiple block MEVs efficiently.
-	SetBlockMEVs(ctx context.Context, blockMEVs []*BlockMEV) error
+	// SetBlockRewards sets multiple block rewards efficiently.
+	SetBlockRewards(ctx context.Context, rewards []*BlockReward) error
 }
 
 // EventsProvider defines functions to provide event information.

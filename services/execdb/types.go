@@ -115,8 +115,8 @@ type Event struct {
 	Data            []byte
 }
 
-// BlockMEV holds information about payments to the fee recipient in a block.
-type BlockMEV struct {
+// BlockReward holds information about the reward paid to the fee recipient in a block.
+type BlockReward struct {
 	BlockHash   []byte
 	BlockHeight uint32
 	Fees        *uint256.Int

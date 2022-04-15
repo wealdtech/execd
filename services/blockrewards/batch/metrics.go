@@ -1,4 +1,4 @@
-// Copyright © 2021 Weald Technology Limited.
+// Copyright © 2021, 2022 Weald Technology Limited.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -21,7 +21,7 @@ import (
 	"github.com/wealdtech/execd/services/metrics"
 )
 
-var metricsNamespace = "mev"
+var metricsNamespace = "rewards"
 
 var latestBlock prometheus.Gauge
 var blocksProcessed prometheus.Gauge

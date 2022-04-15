@@ -39,6 +39,8 @@ import (
 	"github.com/spf13/viper"
 	"github.com/wealdtech/execd/services/balances"
 	batchbalances "github.com/wealdtech/execd/services/balances/batch"
+	"github.com/wealdtech/execd/services/blockrewards"
+	batchblockrewards "github.com/wealdtech/execd/services/blockrewards/batch"
 	"github.com/wealdtech/execd/services/blocks"
 	batchblocks "github.com/wealdtech/execd/services/blocks/batch"
 	individualblocks "github.com/wealdtech/execd/services/blocks/individual"
@@ -47,8 +49,6 @@ import (
 	"github.com/wealdtech/execd/services/metrics"
 	nullmetrics "github.com/wealdtech/execd/services/metrics/null"
 	prometheusmetrics "github.com/wealdtech/execd/services/metrics/prometheus"
-	"github.com/wealdtech/execd/services/mev"
-	batchmev "github.com/wealdtech/execd/services/mev/batch"
 	"github.com/wealdtech/execd/services/scheduler"
 	standardscheduler "github.com/wealdtech/execd/services/scheduler/standard"
 	"github.com/wealdtech/execd/util"
@@ -143,9 +143,9 @@ func fetchConfig() error {
 	pflag.Int32("balances.start-height", -1, "Slot from which to start fetching balances")
 	pflag.String("balances.style", "batch", "Use different balances fetcher (available: batch)")
 	pflag.Duration("balances.interval", 10*time.Second, "Interval between balance updates")
-	pflag.Bool("mev.enable", true, "Enable setting MEV-related information")
-	pflag.Int32("mev.start-height", -1, "Slot from which to start setting MEV information")
-	pflag.Duration("mev.interval", 10*time.Second, "Interval between MEV updates")
+	pflag.Bool("blockrewards.enable", true, "Enable setting block reward information")
+	pflag.Int32("blockrewards.start-height", -1, "Slot from which to start setting block reward information")
+	pflag.Duration("blockrewards.interval", 10*time.Second, "Interval between block reward updates")
 	pflag.String("execclient.address", "", "Address for execution node JSON-RPC endpoint")
 	pflag.Duration("execclient.timeout", 60*time.Second, "Timeout for execution node requests")
 	pflag.Parse()
@@ -284,9 +284,9 @@ func startServices(ctx context.Context, monitor metrics.Service) error {
 		return errors.Wrap(err, "failed to start balances service")
 	}
 
-	log.Trace().Msg("Starting MEV service")
-	if _, err := startMEV(ctx, execDB, monitor); err != nil {
-		return errors.Wrap(err, "failed to start MEV service")
+	log.Trace().Msg("Starting block rewards service")
+	if _, err := startBlockRewards(ctx, execDB, monitor); err != nil {
+		return errors.Wrap(err, "failed to start block rewards service")
 	}
 
 	return nil
@@ -534,7 +534,7 @@ func startBalances(
 	return s, nil
 }
 
-func startMEV(
+func startBlockRewards(
 	ctx context.Context,
 	execDB execdb.Service,
 	monitor metrics.Service,
@@ -542,7 +542,7 @@ func startMEV(
 	blocks.Service,
 	error,
 ) {
-	if !viper.GetBool("mev.enable") {
+	if !viper.GetBool("blockrewards.enable") {
 		return nil, nil
 	}
 
@@ -566,27 +566,27 @@ func startMEV(
 	if !isProvider {
 		return nil, errors.New("database does not provide transaction state diffs")
 	}
-	blockMEVsSetter, isSetter := execDB.(execdb.BlockMEVsSetter)
+	blockRewardsSetter, isSetter := execDB.(execdb.BlockRewardsSetter)
 	if !isSetter {
-		return nil, errors.New("database does not store MEV")
+		return nil, errors.New("database does not store block rewards")
 	}
 
-	var s mev.Service
+	var s blockrewards.Service
 
-	s, err = batchmev.New(ctx,
-		batchmev.WithLogLevel(util.LogLevel("mev")),
-		batchmev.WithMonitor(monitor),
-		batchmev.WithScheduler(scheduler),
-		batchmev.WithBlocksProvider(blocksProvider),
-		batchmev.WithTransactionsProvider(transactionsProvider),
-		batchmev.WithTransactionStateDiffsProvider(transactionStateDiffsProvider),
-		batchmev.WithBlockMEVsSetter(blockMEVsSetter),
-		batchmev.WithStartHeight(viper.GetInt64("mev.start-height")),
-		batchmev.WithProcessConcurrency(util.ProcessConcurrency("mev")),
-		batchmev.WithInterval(viper.GetDuration("mev.interval")),
+	s, err = batchblockrewards.New(ctx,
+		batchblockrewards.WithLogLevel(util.LogLevel("blockrewards")),
+		batchblockrewards.WithMonitor(monitor),
+		batchblockrewards.WithScheduler(scheduler),
+		batchblockrewards.WithBlocksProvider(blocksProvider),
+		batchblockrewards.WithTransactionsProvider(transactionsProvider),
+		batchblockrewards.WithTransactionStateDiffsProvider(transactionStateDiffsProvider),
+		batchblockrewards.WithBlockRewardsSetter(blockRewardsSetter),
+		batchblockrewards.WithStartHeight(viper.GetInt64("blockrewards.start-height")),
+		batchblockrewards.WithProcessConcurrency(util.ProcessConcurrency("blockrewards")),
+		batchblockrewards.WithInterval(viper.GetDuration("blockrewards.interval")),
 	)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create mev service")
+		return nil, errors.Wrap(err, "failed to create block rewards service")
 	}
 
 	return s, nil

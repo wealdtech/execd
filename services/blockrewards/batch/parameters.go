@@ -1,4 +1,4 @@
-// Copyright © 2021 Weald Technology Trading.
+// Copyright © 2021, 2022 Weald Technology Trading.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -30,7 +30,7 @@ type parameters struct {
 	blocksProvider                execdb.BlocksProvider
 	transactionsProvider          execdb.TransactionsProvider
 	transactionStateDiffsProvider execdb.TransactionStateDiffsProvider
-	blockMEVsSetter               execdb.BlockMEVsSetter
+	blockRewardsSetter            execdb.BlockRewardsSetter
 	startHeight                   int64
 	processConcurrency            int64
 	interval                      time.Duration
@@ -89,10 +89,10 @@ func WithTransactionStateDiffsProvider(provider execdb.TransactionStateDiffsProv
 	})
 }
 
-// WithBlockMEVsSetter sets the block MEV setter for this module.
-func WithBlockMEVsSetter(setter execdb.BlockMEVsSetter) Parameter {
+// WithBlockRewardsSetter sets the block rewards setter for this module.
+func WithBlockRewardsSetter(setter execdb.BlockRewardsSetter) Parameter {
 	return parameterFunc(func(p *parameters) {
-		p.blockMEVsSetter = setter
+		p.blockRewardsSetter = setter
 	})
 }
 
@@ -140,8 +140,8 @@ func parseAndCheckParameters(params ...Parameter) (*parameters, error) {
 	if parameters.transactionStateDiffsProvider == nil {
 		return nil, errors.New("no transaction state diffs provider specified")
 	}
-	if parameters.blockMEVsSetter == nil {
-		return nil, errors.New("no block MEV setter specified")
+	if parameters.blockRewardsSetter == nil {
+		return nil, errors.New("no block rewards setter specified")
 	}
 	if parameters.processConcurrency == 0 {
 		return nil, errors.New("no process concurrency specified")

@@ -1,4 +1,4 @@
-// Copyright © 2021 Weald Technology Trading.
+// Copyright © 2021, 2022 Weald Technology Trading.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -26,14 +26,14 @@ type metadata struct {
 }
 
 // serviceMetadataKey is the key for the service-specific metadata.
-var serviceMetadataKey = "mev"
+var serviceMetadataKey = "rewards"
 
 // getMetadata gets metadata for this service.
 func (s *Service) getMetadata(ctx context.Context) (*metadata, error) {
 	md := &metadata{
 		LatestHeight: -1,
 	}
-	mdJSON, err := s.blockMEVsSetter.Metadata(ctx, serviceMetadataKey)
+	mdJSON, err := s.blockRewardsSetter.Metadata(ctx, serviceMetadataKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch metadata")
 	}
@@ -52,7 +52,7 @@ func (s *Service) setMetadata(ctx context.Context, md *metadata) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal metadata")
 	}
-	if err := s.blockMEVsSetter.SetMetadata(ctx, serviceMetadataKey, mdJSON); err != nil {
+	if err := s.blockRewardsSetter.SetMetadata(ctx, serviceMetadataKey, mdJSON); err != nil {
 		return errors.Wrap(err, "failed to update metadata")
 	}
 	return nil

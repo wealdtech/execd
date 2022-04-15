@@ -1,4 +1,4 @@
-// Copyright © 2021 Weald Technology Trading.
+// Copyright © 2021, 2022 Weald Technology Trading.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -21,10 +21,10 @@ import (
 	"github.com/wealdtech/execd/services/execdb"
 )
 
-// SetBlockMEV sets a block's MEV.
-func (s *Service) SetBlockMEV(ctx context.Context, blockMEV *execdb.BlockMEV) error {
-	if blockMEV == nil {
-		return errors.New("block MEV nil")
+// SetBlockReward sets a block's reward.
+func (s *Service) SetBlockReward(ctx context.Context, reward *execdb.BlockReward) error {
+	if reward == nil {
+		return errors.New("block reward nil")
 	}
 
 	tx := s.tx(ctx)
@@ -33,11 +33,11 @@ func (s *Service) SetBlockMEV(ctx context.Context, blockMEV *execdb.BlockMEV) er
 	}
 
 	_, err := tx.Exec(ctx, `
-INSERT INTO t_block_mevs(f_block_hash
-                        ,f_block_height
-                        ,f_fees
-                        ,f_payments
-                        )
+INSERT INTO t_block_rewards(f_block_hash
+                           ,f_block_height
+                           ,f_fees
+                           ,f_payments
+                           )
 VALUES($1,$2,$3,$4)
 ON CONFLICT (f_block_hash) DO
 UPDATE
@@ -45,10 +45,10 @@ SET f_block_height = excluded.f_block_height
    ,f_fees = excluded.f_fees
    ,f_payments = excluded.f_payments
 `,
-		blockMEV.BlockHash,
-		blockMEV.BlockHeight,
-		decimal.NewFromBigInt(blockMEV.Fees.ToBig(), 0),
-		decimal.NewFromBigInt(blockMEV.Payments.ToBig(), 0),
+		reward.BlockHash,
+		reward.BlockHeight,
+		decimal.NewFromBigInt(reward.Fees.ToBig(), 0),
+		decimal.NewFromBigInt(reward.Payments.ToBig(), 0),
 	)
 
 	return err
