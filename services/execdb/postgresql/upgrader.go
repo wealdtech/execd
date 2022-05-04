@@ -25,7 +25,7 @@ type schemaMetadata struct {
 	Version uint64 `json:"version"`
 }
 
-var currentVersion = uint64(6)
+var currentVersion = uint64(7)
 
 type upgrade struct {
 	funcs []func(context.Context, *Service) error
@@ -56,6 +56,11 @@ var upgrades = map[uint64]*upgrade{
 	6: {
 		funcs: []func(context.Context, *Service) error{
 			renameBlockRewards,
+		},
+	},
+	7: {
+		funcs: []func(context.Context, *Service) error{
+			addBlockIndices,
 		},
 	},
 }
@@ -262,6 +267,8 @@ CREATE TABLE t_blocks (
 );
 CREATE UNIQUE INDEX i_blocks_1 ON t_blocks(f_height,f_hash);
 CREATE UNIQUE INDEX i_blocks_2 ON t_blocks(f_hash);
+CREATE INDEX i_blocks_3 ON t_blocks(f_fee_recipient);
+CREATE UNIQUE INDEX i_blocks_4 ON t_blocks(f_timestamp);
 
 -- t_transasctions contains execution layer transactions.
 CREATE TABLE t_transactions (
@@ -686,6 +693,28 @@ SET f_key = 'rewards'
 WHERE f_key = 'mev'
 `); err != nil {
 		return errors.Wrap(err, "failed to rename metadata key")
+	}
+
+	return nil
+}
+
+// addBlockIndices adds indices to the t_blocks table.
+func addBlockIndices(ctx context.Context, s *Service) error {
+	tx := s.tx(ctx)
+	if tx == nil {
+		return ErrNoTransaction
+	}
+
+	if _, err := tx.Exec(ctx, `
+CREATE INDEX IF NOT EXISTS i_blocks_3 ON t_blocks(f_fee_recipient);
+`); err != nil {
+		return errors.Wrap(err, "failed to create i_blocks_3")
+	}
+
+	if _, err := tx.Exec(ctx, `
+CREATE UNIQUE INDEX IF NOT EXISTS i_blocks_4 ON t_blocks(f_timestamp);
+`); err != nil {
+		return errors.Wrap(err, "failed to create i_blocks_4")
 	}
 
 	return nil

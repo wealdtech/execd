@@ -107,9 +107,21 @@ type BlockFilter struct {
 	// If nil then there is no earliest block.
 	From *uint32
 
-	// To is the height of the latest block to fetch.
+	// TimestampTo is the height of the latest block to fetch.
 	// If nil then there is no latest block.
 	To *uint32
+
+	// From is the timestamp of the earliest block to fetch.
+	// If nil then there is no earliest block.
+	TimestampFrom *time.Time
+
+	// TimestampTo is the timestamp of the latest block to fetch.
+	// If nil then there is no latest block.
+	TimestampTo *time.Time
+
+	// FeeRecipients are the fee recipients of the blocks.
+	// If nil then there is no fee recipients filter.
+	FeeRecipients *[][]byte
 }
 
 // EventFilter defines a filter for fetching events.

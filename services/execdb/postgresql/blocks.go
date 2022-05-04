@@ -72,6 +72,25 @@ FROM t_blocks`)
 %s f_height <= $%d`, wherestr, len(queryVals)))
 	}
 
+	if filter.TimestampFrom != nil {
+		queryVals = append(queryVals, *filter.TimestampFrom)
+		queryBuilder.WriteString(fmt.Sprintf(`
+%s f_timestamp >= $%d`, wherestr, len(queryVals)))
+		wherestr = "  AND"
+	}
+
+	if filter.TimestampTo != nil {
+		queryVals = append(queryVals, *filter.TimestampTo)
+		queryBuilder.WriteString(fmt.Sprintf(`
+%s f_timestamp <= $%d`, wherestr, len(queryVals)))
+	}
+
+	if filter.FeeRecipients != nil {
+		queryVals = append(queryVals, *filter.FeeRecipients)
+		queryBuilder.WriteString(fmt.Sprintf(`
+%s f_fee_recipient = ANY($%d)`, wherestr, len(queryVals)))
+	}
+
 	switch filter.Order {
 	case execdb.OrderEarliest:
 		queryBuilder.WriteString(`
