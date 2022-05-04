@@ -32,6 +32,7 @@ import (
 
 	execclient "github.com/attestantio/go-execution-client"
 	"github.com/attestantio/go-execution-client/types"
+	"github.com/fsnotify/fsnotify"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	zerologger "github.com/rs/zerolog/log"
@@ -55,7 +56,7 @@ import (
 )
 
 // ReleaseVersion is the release version for the code.
-var ReleaseVersion = "0.4.2"
+var ReleaseVersion = "0.4.4"
 
 func main() {
 	os.Exit(main2())
@@ -101,13 +102,30 @@ func main2() int {
 	setRelease(ctx, ReleaseVersion)
 	setReady(ctx, false)
 
-	if err := startServices(ctx, monitor); err != nil {
+	balances, err := startServices(ctx, monitor)
+	if err != nil {
 		log.Error().Err(err).Msg("Failed to initialise services")
 		return 1
 	}
 	setReady(ctx, true)
 
 	log.Info().Msg("All services operational")
+
+	// Handle configuration change.
+	viper.OnConfigChange(func(e fsnotify.Event) {
+		log.Debug().Msg("Configuration change detected")
+		addresses := make([]types.Address, len(viper.GetStringSlice("balances.addresses")))
+		for i, str := range viper.GetStringSlice("balances.addresses") {
+			tmp, err := hex.DecodeString(strings.TrimPrefix(str, "0x"))
+			if err != nil {
+				log.Error().Err(err).Msg("Invalid balance address")
+				return
+			}
+			copy(addresses[i][:], tmp)
+		}
+		balances.SetAddresses(addresses)
+	})
+	viper.WatchConfig()
 
 	// Wait for signal.
 	sigCh := make(chan os.Signal, 1)
@@ -131,6 +149,7 @@ func fetchConfig() error {
 	pflag.String("log-file", "", "redirect log output to a file")
 	pflag.String("profile-address", "", "Address on which to run Go profile server")
 	pflag.String("tracing-address", "", "Address to which to send tracing data")
+	pflag.Uint32("track-distance", 64, "Number of blocks from head to fetch data")
 	pflag.Bool("blocks.enable", true, "Enable fetching of block-related information")
 	pflag.Bool("blocks.transactions.enable", true, "Enable fetching of transaction-related information (requires blocks to be enabled)")
 	pflag.Bool("blocks.transactions.events.enable", true, "Enable fetching of transaction event information (requires blocks and transactions to be enabled)")
@@ -218,7 +237,10 @@ func startMonitor(ctx context.Context) (metrics.Service, error) {
 	return monitor, nil
 }
 
-func startServices(ctx context.Context, monitor metrics.Service) error {
+func startServices(ctx context.Context, monitor metrics.Service) (
+	balances.Service,
+	error,
+) {
 	log.Trace().Msg("Starting exec database service")
 	execDB, err := postgresqlexecdb.New(ctx,
 		postgresqlexecdb.WithLogLevel(util.LogLevel("execdb")),
@@ -228,21 +250,21 @@ func startServices(ctx context.Context, monitor metrics.Service) error {
 		postgresqlexecdb.WithPassword(viper.GetString("execdb.password")),
 	)
 	if err != nil {
-		return errors.Wrap(err, "failed to start exec database service")
+		return nil, errors.Wrap(err, "failed to start exec database service")
 	}
 
 	log.Trace().Msg("Checking for schema upgrades")
 	if err := execDB.Upgrade(ctx); err != nil {
-		return errors.Wrap(err, "failed to upgrade exec database")
+		return nil, errors.Wrap(err, "failed to upgrade exec database")
 	}
 
 	log.Trace().Str("address", viper.GetString("execclient.address")).Msg("Fetching execution client")
 	execClient, err := fetchClient(ctx, viper.GetString("execclient.address"))
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("failed to fetch client %q", viper.GetString("execclient.address")))
+		return nil, errors.Wrap(err, fmt.Sprintf("failed to fetch client %q", viper.GetString("execclient.address")))
 	}
 	if err != nil {
-		return errors.Wrap(err, "failed to fetch execution client")
+		return nil, errors.Wrap(err, "failed to fetch execution client")
 	}
 
 	// Wait for the node to sync.
@@ -271,25 +293,26 @@ func startServices(ctx context.Context, monitor metrics.Service) error {
 		standardscheduler.WithMonitor(monitor),
 	)
 	if err != nil {
-		return errors.Wrap(err, "failed to start scheduler service")
+		return nil, errors.Wrap(err, "failed to start scheduler service")
 	}
 
 	log.Trace().Msg("Starting blocks service")
 	if _, err := startBlocks(ctx, execClient, execDB, monitor, scheduler); err != nil {
-		return errors.Wrap(err, "failed to start blocks service")
+		return nil, errors.Wrap(err, "failed to start blocks service")
 	}
 
 	log.Trace().Msg("Starting balances service")
-	if _, err := startBalances(ctx, execClient, execDB, monitor, scheduler); err != nil {
-		return errors.Wrap(err, "failed to start balances service")
+	balances, err := startBalances(ctx, execClient, execDB, monitor, scheduler)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to start balances service")
 	}
 
 	log.Trace().Msg("Starting block rewards service")
 	if _, err := startBlockRewards(ctx, execDB, monitor); err != nil {
-		return errors.Wrap(err, "failed to start block rewards service")
+		return nil, errors.Wrap(err, "failed to start block rewards service")
 	}
 
-	return nil
+	return balances, nil
 }
 
 func logModules() {
@@ -406,6 +429,7 @@ func startBlocks(
 			individualblocks.WithTransactionsSetter(transactionsSetter),
 			individualblocks.WithTransactionStateDiffsSetter(transactionStateDiffsSetter),
 			individualblocks.WithEventsSetter(eventsSetter),
+			individualblocks.WithTrackDistance(viper.GetUint32("track-distance")),
 			individualblocks.WithStartHeight(viper.GetInt64("blocks.start-height")),
 			individualblocks.WithTransactions(viper.GetBool("blocks.transactions.enable")),
 			individualblocks.WithStorageChanges(viper.GetBool("blocks.transactions.storage.enable")),
@@ -427,6 +451,7 @@ func startBlocks(
 			batchblocks.WithTransactionsSetter(transactionsSetter),
 			batchblocks.WithTransactionStateDiffsSetter(transactionStateDiffsSetter),
 			batchblocks.WithEventsSetter(eventsSetter),
+			batchblocks.WithTrackDistance(viper.GetUint32("track-distance")),
 			batchblocks.WithStartHeight(viper.GetInt64("blocks.start-height")),
 			batchblocks.WithTransactions(viper.GetBool("blocks.transactions.enable")),
 			batchblocks.WithStorageChanges(viper.GetBool("blocks.transactions.storage.enable")),
@@ -452,7 +477,7 @@ func startBalances(
 	monitor metrics.Service,
 	scheduler scheduler.Service,
 ) (
-	blocks.Service,
+	balances.Service,
 	error,
 ) {
 	if !viper.GetBool("balances.enable") {
@@ -518,6 +543,7 @@ func startBalances(
 			batchbalances.WithBlocksProvider(blocksProvider),
 			batchbalances.WithBalancesSetter(balancesSetter),
 			batchbalances.WithDBBalancesProvider(dbBalancesProvider),
+			batchbalances.WithTrackDistance(viper.GetUint32("track-distance")),
 			batchbalances.WithAddresses(addresses),
 			batchbalances.WithStartHeight(viper.GetInt64("balances.start-height")),
 			batchbalances.WithProcessConcurrency(util.ProcessConcurrency("balances")),

@@ -37,6 +37,7 @@ type parameters struct {
 	transactionsSetter          execdb.TransactionsSetter
 	transactionStateDiffsSetter execdb.TransactionStateDiffsSetter
 	eventsSetter                execdb.EventsSetter
+	trackDistance               uint32
 	startHeight                 int64
 	enableTransactions          bool
 	enableTransactionEvents     bool
@@ -137,6 +138,13 @@ func WithTransactionStateDiffsSetter(setter execdb.TransactionStateDiffsSetter) 
 func WithEventsSetter(setter execdb.EventsSetter) Parameter {
 	return parameterFunc(func(p *parameters) {
 		p.eventsSetter = setter
+	})
+}
+
+// WithTrackDistance sets the track distance for this module.
+func WithTrackDistance(trackDistance uint32) Parameter {
+	return parameterFunc(func(p *parameters) {
+		p.trackDistance = trackDistance
 	})
 }
 

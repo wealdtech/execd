@@ -13,5 +13,10 @@
 
 package balances
 
+import "github.com/attestantio/go-execution-client/types"
+
 // Service defines a balances service.
-type Service interface{}
+type Service interface {
+	// SetAddresses sets the addresses tracked by the balances service.
+	SetAddresses(addresses []types.Address)
+}

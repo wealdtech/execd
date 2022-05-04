@@ -17,20 +17,11 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/attestantio/go-execution-client/types"
-	"github.com/pkg/errors"
 	"github.com/shopspring/decimal"
 	"github.com/wealdtech/execd/services/execdb"
-	"github.com/wealdtech/execd/util"
-	"go.uber.org/atomic"
-	"golang.org/x/sync/semaphore"
 )
-
-type batchData struct {
-	balances map[types.Address]decimal.Decimal
-}
 
 func (s *Service) catchup(ctx context.Context, md *metadata) {
 	chainHeight, err := s.chainHeightProvider.ChainHeight(ctx)
@@ -38,125 +29,119 @@ func (s *Service) catchup(ctx context.Context, md *metadata) {
 		log.Error().Err(err).Msg("Failed to obtain chain height")
 		return
 	}
-	safetyMargin := uint32(64) // Run 64 blocks behind for safety; could make this much tighter with integration With CL.
-	maxHeight := chainHeight - safetyMargin
-	log.Trace().Uint32("chain_height", chainHeight).Uint32("fetch_height", maxHeight).Msg("Fetch parameters")
 
-	// We processing of a subsequent batch to occur whilst storage of batch is taking place.  Use a semaphore
-	// to ensure that only 1 write is queued at a time.
-	writeSem := semaphore.NewWeighted(1)
+	if chainHeight < s.trackDistance {
+		log.Trace().Msg("Chain height not above track distance; not processing")
+		return
+	}
+	maxHeight := chainHeight - s.trackDistance
+	log.Trace().Uint32("chain_height", chainHeight).Uint32("max_height", maxHeight).Msg("Fetch parameters")
 
-	// If the store operation fails we need to know about it.
-	var storeFailed atomic.Bool
-	storeFailed.Store(false)
-
-	// Batch process the updates, fetching balances in parallel
-	for height := uint32(md.LatestHeight + 1); height <= maxHeight; height++ {
-		if storeFailed.Load() {
-			return
+	mdMu := &sync.Mutex{}
+	var wg sync.WaitGroup
+	// Fetch for each address in parallel.
+	s.addressesMu.RLock()
+	for _, address := range s.addresses {
+		latestHeight, exists := md.LatestHeights[fmt.Sprintf("%#x", address)]
+		if !exists {
+			latestHeight = -1
 		}
 
-		bd := &batchData{
-			balances: make(map[types.Address]decimal.Decimal, len(s.addresses)),
-		}
-
-		block, err := s.blocksProvider.Block(ctx, fmt.Sprintf("%d", height))
-		if err != nil {
-			log.Error().Err(err).Msg("Failed to obtain block")
-		}
-
-		if _, err = util.Scatter(len(s.addresses), int(s.processConcurrency), func(offset int, entries int, mu *sync.RWMutex) (interface{}, error) {
-			for i := offset; i < offset+entries; i++ {
-				balance, err := s.balancesProvider.Balance(ctx, s.addresses[i], fmt.Sprintf("%d", height))
-				if err != nil {
-					return nil, err
-				}
-				mu.Lock()
-				bd.balances[s.addresses[i]] = decimal.NewFromBigInt(balance, 0)
-				mu.Unlock()
-				log.Trace().Str("address", fmt.Sprintf("%#x", s.addresses[i])).Uint32("height", height).Str("balance", balance.String()).Msg("Fetched balance")
-			}
-			return nil, nil
-		}); err != nil {
-			log.Error().Err(err).Msg("Failed to batch fetch balances")
-			return
-		}
-
-		if err := writeSem.Acquire(ctx, 1); err != nil {
-			log.Error().Err(err).Msg("Failed to acquire write semaphore")
-		}
+		wg.Add(1)
 		go func(ctx context.Context,
 			md *metadata,
-			bd *batchData,
+			mdMu *sync.Mutex,
+			address types.Address,
+			startHeight uint32,
+			endHeight uint32,
 		) {
-			if storeFailed.Load() {
-				return
-			}
-			if err := s.store(ctx, md, bd, block.Number(), block.Timestamp()); err != nil {
-				log.Error().Err(err).Msg("Failed to store")
-				storeFailed.Store(true)
-				writeSem.Release(1)
-				return
-			}
-			log.Trace().Msg("Stored")
-			writeSem.Release(1)
-		}(ctx, md, bd)
+			defer wg.Done()
+			s.catchupAddress(ctx, md, mdMu, address, startHeight, endHeight)
+		}(ctx, md, mdMu, address, uint32(latestHeight+1), maxHeight)
 	}
+	s.addressesMu.RUnlock()
+	wg.Wait()
 }
 
-func (s *Service) store(ctx context.Context,
+func (s *Service) catchupAddress(ctx context.Context,
 	md *metadata,
-	bd *batchData,
-	height uint32,
-	timestamp time.Time,
-) error {
-	ctx, cancel, err := s.balancesSetter.BeginTx(ctx)
-	if err != nil {
-		return errors.Wrap(err, "failed to begin transaction")
-	}
+	mdMu *sync.Mutex,
+	address types.Address,
+	startHeight uint32,
+	endHeight uint32,
+) {
+	log := log.With().Str("address", fmt.Sprintf("%#x", address)).Logger()
 
-	// Build a list of updated balances.
-	s.currentBalancesMu.Lock()
-	balances := make([]*execdb.Balance, 0, len(bd.balances))
-	for address, balance := range bd.balances {
-		if !s.currentBalances[address].Equal(balance) {
-			log.Trace().Str("address", fmt.Sprintf("%#x", address)).Str("old_balance", s.currentBalances[address].String()).Str("new_balance", balance.String()).Msg("Balance has changed")
-			balances = append(balances, &execdb.Balance{
-				Address:  address,
-				Currency: "WEI",
-				From:     timestamp,
-				Amount:   balance,
-			})
+	batchSize := uint32(1024)
+	balances := make([]*execdb.Balance, 0)
+	for height := startHeight; height <= endHeight; height += batchSize {
+		batchEnd := height + batchSize
+		if batchEnd > endHeight {
+			batchEnd = endHeight
 		}
-	}
-	s.currentBalancesMu.Unlock()
 
-	if len(balances) > 0 {
-		if err := s.balancesSetter.SetBalances(ctx, balances); err != nil {
+		for balanceHeight := height; balanceHeight <= batchEnd; balanceHeight++ {
+			log := log.With().Uint32("height", balanceHeight).Logger()
+
+			block, err := s.blocksProvider.Block(ctx, fmt.Sprintf("%d", balanceHeight))
+			if err != nil {
+				log.Error().Err(err).Msg("Failed to obtain block")
+				return
+			}
+
+			balance, err := s.balancesProvider.Balance(ctx, address, fmt.Sprintf("%d", balanceHeight))
+			if err != nil {
+				log.Error().Err(err).Msg("Failed to obtain balance")
+				return
+			}
+			log.Trace().Str("balance", balance.String()).Msg("Obtained balance")
+			s.currentBalancesMu.Lock()
+			oldBalance := s.currentBalances[address]
+			s.currentBalancesMu.Unlock()
+			newBalance := decimal.NewFromBigInt(balance, 0)
+			if !oldBalance.Equal(newBalance) {
+				log.Trace().Str("old_balance", oldBalance.String()).Str("new_balance", newBalance.String()).Msg("Updated balance")
+				balances = append(balances, &execdb.Balance{
+					Address:  address,
+					Currency: "WEI",
+					From:     block.Timestamp(),
+					Amount:   newBalance,
+				})
+				// Update cache.
+				s.currentBalancesMu.Lock()
+				s.currentBalances[address] = newBalance
+				s.currentBalancesMu.Unlock()
+			}
+		}
+
+		ctx, cancel, err := s.balancesSetter.BeginTx(ctx)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to begin transaction")
+			return
+		}
+		if len(balances) > 0 {
+			if err := s.balancesSetter.SetBalances(ctx, balances); err != nil {
+				log.Error().Err(err).Msg("Failed to store balances")
+				cancel()
+				return
+			}
+		}
+
+		mdMu.Lock()
+		md.LatestHeights[fmt.Sprintf("%#x", address)] = int64(batchEnd)
+		if err := s.setMetadata(ctx, md); err != nil {
 			cancel()
-			return errors.Wrap(err, "failed to set balances")
+			log.Error().Err(err).Msg("Failed to set metadata")
+			return
 		}
+		mdMu.Unlock()
+
+		if err := s.balancesSetter.CommitTx(ctx); err != nil {
+			cancel()
+			log.Error().Err(err).Msg("Failed to commit transaction")
+			return
+		}
+
+		monitorBlocksProcessed(int(batchEnd+1-startHeight), height)
 	}
-
-	md.LatestHeight = int64(height)
-	if err := s.setMetadata(ctx, md); err != nil {
-		cancel()
-		return errors.Wrap(err, "failed to set metadata")
-	}
-
-	if err := s.balancesSetter.CommitTx(ctx); err != nil {
-		cancel()
-		return errors.Wrap(err, "failed to commit transaction")
-	}
-
-	// Update cache.
-	s.currentBalancesMu.Lock()
-	for _, balance := range balances {
-		s.currentBalances[balance.Address] = balance.Amount
-	}
-	s.currentBalancesMu.Unlock()
-
-	monitorBlockProcessed(height)
-
-	return nil
 }

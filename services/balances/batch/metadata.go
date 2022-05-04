@@ -22,19 +22,19 @@ import (
 
 // metadata stored about this service.
 type metadata struct {
-	LatestHeight int64 `json:"latest_height"`
+	LatestHeights map[string]int64 `json:"latest_heights"`
 }
 
 // serviceMetadataKey is the key for the service-specific metadata.
 var serviceMetadataKey = "balances"
 
 // implMetadataKey is the key for the implementation-specific metadata.
-// var implMetadataKey = "blocks.batch"
+// var implMetadataKey = "balances.batch"
 
 // getMetadata gets metadata for this service.
 func (s *Service) getMetadata(ctx context.Context) (*metadata, error) {
 	md := &metadata{
-		LatestHeight: -1,
+		LatestHeights: make(map[string]int64),
 	}
 	mdJSON, err := s.balancesSetter.Metadata(ctx, serviceMetadataKey)
 	if err != nil {

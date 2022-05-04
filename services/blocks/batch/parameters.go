@@ -37,6 +37,7 @@ type parameters struct {
 	transactionsSetter          execdb.TransactionsSetter
 	transactionStateDiffsSetter execdb.TransactionStateDiffsSetter
 	eventsSetter                execdb.EventsSetter
+	trackDistance               uint32
 	startHeight                 int64
 	enableTransactions          bool
 	enableTransactionEvents     bool
@@ -141,6 +142,13 @@ func WithEventsSetter(setter execdb.EventsSetter) Parameter {
 	})
 }
 
+// WithTrackDistance sets the track distance for this module.
+func WithTrackDistance(trackDistance uint32) Parameter {
+	return parameterFunc(func(p *parameters) {
+		p.trackDistance = trackDistance
+	})
+}
+
 // WithStartHeight sets the start height for this module.
 func WithStartHeight(startHeight int64) Parameter {
 	return parameterFunc(func(p *parameters) {
@@ -228,6 +236,9 @@ func parseAndCheckParameters(params ...Parameter) (*parameters, error) {
 	}
 	if parameters.eventsSetter == nil {
 		return nil, errors.New("no events setter specified")
+	}
+	if parameters.trackDistance == 0 {
+		return nil, errors.New("no track distance specified")
 	}
 	if parameters.processConcurrency == 0 {
 		return nil, errors.New("no process concurrency specified")

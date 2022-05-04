@@ -34,6 +34,7 @@ type parameters struct {
 	blocksProvider      execclient.BlocksProvider
 	balancesSetter      execdb.BalancesSetter
 	dbBalancesProvider  execdb.BalancesProvider
+	trackDistance       uint32
 	addresses           []types.Address
 	startHeight         int64
 	processConcurrency  int64
@@ -107,6 +108,13 @@ func WithDBBalancesProvider(provider execdb.BalancesProvider) Parameter {
 	})
 }
 
+// WithTrackDistance sets the track distance for this module.
+func WithTrackDistance(trackDistance uint32) Parameter {
+	return parameterFunc(func(p *parameters) {
+		p.trackDistance = trackDistance
+	})
+}
+
 // WithAddresses sets the addresses for this module.
 func WithAddresses(addresses []types.Address) Parameter {
 	return parameterFunc(func(p *parameters) {
@@ -163,6 +171,9 @@ func parseAndCheckParameters(params ...Parameter) (*parameters, error) {
 	}
 	if parameters.dbBalancesProvider == nil {
 		return nil, errors.New("no database balances provider specified")
+	}
+	if parameters.trackDistance == 0 {
+		return nil, errors.New("no track distance specified")
 	}
 	if len(parameters.addresses) == 0 {
 		return nil, errors.New("no addresses specified")

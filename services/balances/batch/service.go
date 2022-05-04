@@ -38,7 +38,9 @@ type Service struct {
 	blocksProvider      execclient.BlocksProvider
 	balancesSetter      execdb.BalancesSetter
 	dbBalancesProvider  execdb.BalancesProvider
+	trackDistance       uint32
 	addresses           []types.Address
+	addressesMu         sync.RWMutex
 	processConcurrency  int64
 	interval            time.Duration
 	activitySem         *semaphore.Weighted
@@ -70,6 +72,7 @@ func New(ctx context.Context, params ...Parameter) (*Service, error) {
 		blocksProvider:      parameters.blocksProvider,
 		balancesSetter:      parameters.balancesSetter,
 		dbBalancesProvider:  parameters.dbBalancesProvider,
+		trackDistance:       parameters.trackDistance,
 		addresses:           parameters.addresses,
 		processConcurrency:  parameters.processConcurrency,
 		interval:            parameters.interval,
@@ -89,19 +92,19 @@ func (s *Service) updateOnRestart(ctx context.Context, startHeight int64) {
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to obtain metadata before catchup")
 	}
-	if startHeight >= 0 {
-		// Explicit requirement to start at a given height.
-		// Subtract one to state that the block higher than the required start is the last processed.
-		md.LatestHeight = startHeight - 1
-	}
+	// if startHeight >= 0 {
+	// 	// Explicit requirement to start at a given height.
+	// 	// Subtract one to state that the block higher than the required start is the last processed.
+	// 	md.LatestHeight = startHeight - 1
+	// }
 
 	// Populate the balance cache.
-	if err := s.populateBalanceCache(ctx, md.LatestHeight); err != nil {
+	if err := s.populateBalanceCache(ctx, md.LatestHeights); err != nil {
 		log.Fatal().Err(err).Msg("Failed to populate balance cache")
 	}
-	log.Info().Int64("height", md.LatestHeight).Msg("Catching up from slot")
+	log.Info().Msg("Catching up")
 	s.catchup(ctx, md)
-	log.Info().Int64("height", md.LatestHeight).Msg("Caught up; starting periodic update")
+	log.Info().Msg("Caught up")
 
 	runtimeFunc := func(ctx context.Context, data interface{}) (time.Time, error) {
 		return time.Now().Add(s.interval), nil
@@ -135,35 +138,35 @@ func (s *Service) updateOnScheduleTick(ctx context.Context, data interface{}) {
 		return
 	}
 
-	log.Trace().Int64("height", md.LatestHeight).Msg("Catching up from slot")
+	log.Trace().Msg("Catching up")
 	s.catchup(ctx, md)
-	log.Trace().Int64("height", md.LatestHeight).Msg("Caught up")
+	log.Trace().Msg("Caught up")
 }
 
-func (s *Service) populateBalanceCache(ctx context.Context, height int64) error {
+func (s *Service) populateBalanceCache(ctx context.Context, heights map[string]int64) error {
 	// Start by setting all balances to 0.
 	s.currentBalancesMu.Lock()
+	s.addressesMu.RLock()
+	defer s.addressesMu.RUnlock()
 	for _, address := range s.addresses {
 		s.currentBalances[address] = decimal.NewFromInt(0)
 	}
 	s.currentBalancesMu.Unlock()
 
-	// If we are starting early then we don't need to do anything else.
-	if height < 0 {
-		return nil
-	}
-
-	// Fetch the block at the given height for its timestamp.
-	block, err := s.blocksProvider.Block(ctx, fmt.Sprintf("%d", height))
-	if err != nil {
-		return errors.Wrap(err, "failed to obtain block")
-	}
-
-	// Obtain the latest balance for each address.
-	holders := make([][]byte, 1)
-	timestamp := block.Timestamp()
 	for _, address := range s.addresses {
-		holders[0] = address[:]
+		height, exists := heights[fmt.Sprintf("%#x", address)]
+		if !exists {
+			// Starting from the beginning.
+			continue
+		}
+
+		block, err := s.blocksProvider.Block(ctx, fmt.Sprintf("%d", height))
+		if err != nil {
+			return errors.Wrap(err, "failed to obtain block")
+		}
+
+		holders := [][]byte{address[:]}
+		timestamp := block.Timestamp()
 		balances, err := s.dbBalancesProvider.Balances(ctx, &execdb.BalanceFilter{
 			To:       &timestamp,
 			Order:    execdb.OrderLatest,
@@ -175,16 +178,20 @@ func (s *Service) populateBalanceCache(ctx context.Context, height int64) error 
 			return errors.Wrap(err, "failed to obtain database balances")
 		}
 
-		s.currentBalancesMu.Lock()
-		for _, balance := range balances {
-			//			address := types.Address{}
-			//			copy(address[:], balance.Address)
-			//			s.currentBalances[address] = balance.Amount
-			s.currentBalances[balance.Address] = balance.Amount
-			log.Trace().Str("address", fmt.Sprintf("%#x", address)).Str("balance", balance.Amount.String()).Msg("Initial balance")
+		if len(balances) > 0 {
+			s.currentBalancesMu.Lock()
+			s.currentBalances[balances[0].Address] = balances[0].Amount
+			s.currentBalancesMu.Unlock()
+			log.Trace().Str("address", fmt.Sprintf("%#x", address)).Str("balance", balances[0].Amount.String()).Msg("Initial balance")
 		}
-		s.currentBalancesMu.Unlock()
 	}
 
 	return nil
+}
+
+// SetAddresses sets the addresses to monitor.
+func (s *Service) SetAddresses(addresses []types.Address) {
+	s.addressesMu.Lock()
+	s.addresses = addresses
+	s.addressesMu.Unlock()
 }

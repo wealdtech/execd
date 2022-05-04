@@ -28,8 +28,12 @@ func (s *Service) catchup(ctx context.Context, md *metadata) {
 		log.Error().Err(err).Msg("Failed to obtain chain height")
 		return
 	}
-	safetyMargin := uint32(64) // Run 64 blocks behind for safety; could make this much tighter with integration With CL.
-	maxHeight := chainHeight - safetyMargin
+
+	if chainHeight < s.trackDistance {
+		log.Trace().Msg("Chain height not above track distance; not processing")
+		return
+	}
+	maxHeight := chainHeight - s.trackDistance
 	log.Trace().Uint32("chain_height", chainHeight).Uint32("fetch_height", maxHeight).Msg("Fetch parameters")
 
 	for height := uint32(md.LatestHeight + 1); height <= maxHeight; height++ {

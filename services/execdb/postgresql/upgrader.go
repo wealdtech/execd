@@ -246,7 +246,7 @@ CREATE TABLE t_metadata (
  ,f_value JSONB NOT NULL
 );
 CREATE UNIQUE INDEX i_metadata_1 ON t_metadata(f_key);
-INSERT INTO t_metadata VALUES('schema', '{"version": 5}');
+INSERT INTO t_metadata VALUES('schema', '{"version": 7}');
 
 -- t_blocks contains execution layer blocks.
 CREATE TABLE t_blocks (
@@ -353,13 +353,13 @@ CREATE TABLE t_block_rewards (
  ,f_fees         NUMERIC NOT NULL
  ,f_payments     NUMERIC NOT NULL
 );
-CREATE UNIQUE INDEX i_block_mevs_1 ON t_block_mevs(f_block_hash);
-CREATE INDEX i_block_mevs_2 ON t_block_mevs(f_block_height);
+CREATE UNIQUE INDEX i_block_rewards_1 ON t_block_rewards(f_block_hash);
+CREATE INDEX i_block_rewards_2 ON t_block_rewards(f_block_height);
 
 -- t_balances contains balances on addresses.
 CREATE TABLE t_balances (
   f_address  BYTEA NOT NULL
- ,f_currency BYTEA NOT NULL
+ ,f_currency TEXT NOT NULL
  ,f_from     TIMESTAMPTZ NOT NULL
  ,f_amount   NUMERIC NOT NULL
 );
@@ -635,7 +635,7 @@ func addBalancesTable(ctx context.Context, s *Service) error {
 	if _, err := tx.Exec(ctx, `
 CREATE TABLE t_balances (
   f_address  BYTEA NOT NULL
- ,f_currency BYTEA NOT NULL
+ ,f_currency TEXT NOT NULL
  ,f_from     TIMESTAMPTZ NOT NULL
  ,f_amount   NUMERIC NOT NULL
 )`); err != nil {

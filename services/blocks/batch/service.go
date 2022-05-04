@@ -38,6 +38,7 @@ type Service struct {
 	transactionsSetter          execdb.TransactionsSetter
 	transactionStateDiffsSetter execdb.TransactionStateDiffsSetter
 	eventsSetter                execdb.EventsSetter
+	trackDistance               uint32
 	activitySem                 *semaphore.Weighted
 	enableTransactions          bool
 	enableTransactionEvents     bool
@@ -75,6 +76,7 @@ func New(ctx context.Context, params ...Parameter) (*Service, error) {
 		transactionsSetter:          parameters.transactionsSetter,
 		transactionStateDiffsSetter: parameters.transactionStateDiffsSetter,
 		eventsSetter:                parameters.eventsSetter,
+		trackDistance:               parameters.trackDistance,
 		activitySem:                 semaphore.NewWeighted(1),
 		enableTransactions:          parameters.enableTransactions,
 		enableTransactionEvents:     parameters.enableTransactionEvents,
