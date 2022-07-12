@@ -83,10 +83,12 @@ func (s *Service) catchup(ctx context.Context, md *metadata) {
 				log.Trace().Uint32("height", blockHeights[i]).Msg("Fetching block")
 				block, err := s.blocksProvider.Block(ctx, fmt.Sprintf("%d", blockHeights[i]))
 				if err != nil {
-					return nil, err
+					log.Debug().Uint32("height", blockHeights[i]).Msg("Failed to obtain block")
+					return nil, errors.Wrap(err, "failed to obtain block")
 				}
 				if err := s.handleBlock(ctx, md, mu, bd, i, block); err != nil {
-					return nil, err
+					log.Debug().Uint32("height", blockHeights[i]).Msg("Failed to handle block")
+					return nil, errors.Wrap(err, "failed to handle block")
 				}
 			}
 			return nil, nil

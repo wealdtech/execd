@@ -25,7 +25,7 @@ type schemaMetadata struct {
 	Version uint64 `json:"version"`
 }
 
-var currentVersion = uint64(7)
+var currentVersion = uint64(8)
 
 type upgrade struct {
 	funcs []func(context.Context, *Service) error
@@ -61,6 +61,11 @@ var upgrades = map[uint64]*upgrade{
 	7: {
 		funcs: []func(context.Context, *Service) error{
 			addBlockIndices,
+		},
+	},
+	8: {
+		funcs: []func(context.Context, *Service) error{
+			addTransactionStorageForeignKey,
 		},
 	},
 }
@@ -246,7 +251,7 @@ CREATE TABLE t_metadata (
  ,f_value JSONB NOT NULL
 );
 CREATE UNIQUE INDEX i_metadata_1 ON t_metadata(f_key);
-INSERT INTO t_metadata VALUES('schema', '{"version": 7}');
+INSERT INTO t_metadata VALUES('schema', '{"version": 8}');
 
 -- t_blocks contains execution layer blocks.
 CREATE TABLE t_blocks (
@@ -323,7 +328,7 @@ CREATE INDEX i_transaction_balance_changes_3 ON t_transaction_balance_changes(f_
 
 -- t_transaction_storage_changes contains storage changes as a result of a transaction.
 CREATE TABLE t_transaction_storage_changes (
-  f_transaction_hash BYTEA NOT NULL
+  f_transaction_hash BYTEA NOT NULL REFERENCES t_transactions(f_hash) ON DELETE CASCADE
  ,f_block_height     INTEGER NOT NULL
  ,f_address          BYTEA NOT NULL
  ,f_storage_address  BYTEA NOT NULL
@@ -715,6 +720,22 @@ CREATE INDEX IF NOT EXISTS i_blocks_3 ON t_blocks(f_fee_recipient);
 CREATE UNIQUE INDEX IF NOT EXISTS i_blocks_4 ON t_blocks(f_timestamp);
 `); err != nil {
 		return errors.Wrap(err, "failed to create i_blocks_4")
+	}
+
+	return nil
+}
+
+// addTransactionStorageForeignKey adds a foreign key to the t_transaction_storage_changes table.
+func addTransactionStorageForeignKey(ctx context.Context, s *Service) error {
+	tx := s.tx(ctx)
+	if tx == nil {
+		return ErrNoTransaction
+	}
+
+	if _, err := tx.Exec(ctx, `
+ALTER TABLE t_transaction_storage_changes ADD FOREIGN KEY(f_transaction_hash) REFERENCES t_transactions(f_hash) ON DELETE CASCADE;
+`); err != nil {
+		return errors.Wrap(err, "failed to add foreign key to t_transaction_storage_changes")
 	}
 
 	return nil

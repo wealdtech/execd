@@ -16,6 +16,7 @@ package postgresql
 import (
 	"context"
 
+	"github.com/holiman/uint256"
 	"github.com/pkg/errors"
 	"github.com/shopspring/decimal"
 	"github.com/wealdtech/execd/services/execdb"
@@ -25,6 +26,12 @@ import (
 func (s *Service) SetBlockReward(ctx context.Context, reward *execdb.BlockReward) error {
 	if reward == nil {
 		return errors.New("block reward nil")
+	}
+	if reward.Fees == nil {
+		reward.Fees = uint256.NewInt(0)
+	}
+	if reward.Payments == nil {
+		reward.Fees = uint256.NewInt(0)
 	}
 
 	tx := s.tx(ctx)
