@@ -16,6 +16,7 @@ package individual
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/attestantio/go-execution-client/spec"
 	"github.com/pkg/errors"
@@ -45,8 +46,15 @@ func (s *Service) catchup(ctx context.Context, md *metadata) {
 		}
 
 		if err := s.handleBlock(ctx, md, block); err != nil {
-			log.Error().Err(err).Uint32("height", block.Number()).Str("hash", fmt.Sprintf("%#x", block.Hash())).Msg("Failed to handle block")
-			return
+			if strings.Contains(err.Error(), "failed to replay block") {
+				// Erigon can generate this error due to internal problems with its database.  Nothing we can do about it,
+				// so we flag it as an error and move on.
+				log.Error().Err(err).Uint32("height", block.Number()).Str("hash", fmt.Sprintf("%#x", block.Hash())).Msg("Failed to replay block transactions, skipping and moving on")
+				monitorBlockProcessed(block.Number(), "failed")
+			} else {
+				log.Error().Err(err).Uint32("height", block.Number()).Str("hash", fmt.Sprintf("%#x", block.Hash())).Msg("Failed to handle block")
+				return
+			}
 		}
 	}
 }
@@ -109,7 +117,7 @@ func (s *Service) handleBlock(ctx context.Context,
 		cancel()
 		return errors.Wrap(err, "failed to commit transaction")
 	}
-	monitorBlockProcessed(block.Number())
+	monitorBlockProcessed(block.Number(), "succeeded")
 
 	return nil
 }

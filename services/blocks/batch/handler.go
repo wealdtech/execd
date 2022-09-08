@@ -16,6 +16,7 @@ package batch
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/attestantio/go-execution-client/spec"
@@ -88,7 +89,14 @@ func (s *Service) catchup(ctx context.Context, md *metadata) {
 				}
 				if err := s.handleBlock(ctx, md, mu, bd, i, block); err != nil {
 					log.Debug().Uint32("height", blockHeights[i]).Msg("Failed to handle block")
-					return nil, errors.Wrap(err, "failed to handle block")
+					if strings.Contains(err.Error(), "failed to replay block") {
+						// Erigon can generate this error due to internal problems with its database.  Nothing we can do about it,
+						// so we flag it as an error and move on.
+						log.Error().Err(err).Msg("Failed to replay block, skipping and moving on")
+						monitorBlockProcessed(blockHeights[i], "failed")
+					} else {
+						return nil, errors.Wrap(err, "failed to handle block")
+					}
 				}
 			}
 			return nil, nil
@@ -96,6 +104,15 @@ func (s *Service) catchup(ctx context.Context, md *metadata) {
 			log.Error().Err(err).Msg("Failed to batch fetch blocks")
 			return
 		}
+
+		// Remove any empty blocks from the list.
+		blocks := make([]*execdb.Block, 0, entries)
+		for _, block := range bd.blocks {
+			if block != nil {
+				blocks = append(blocks, block)
+			}
+		}
+		bd.blocks = blocks
 
 		if err := writeSem.Acquire(ctx, 1); err != nil {
 			log.Error().Err(err).Msg("Failed to acquire write semaphore")
@@ -375,7 +392,9 @@ func (s *Service) store(ctx context.Context,
 		return errors.Wrap(err, "failed to commit transaction")
 	}
 
-	monitorBlockProcessed(bd.blocks[len(bd.blocks)-1].Height)
+	for _, block := range bd.blocks {
+		monitorBlockProcessed(block.Height, "succeeded")
+	}
 
 	return nil
 }
