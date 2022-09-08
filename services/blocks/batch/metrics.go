@@ -1,4 +1,4 @@
-// Copyright © 2021 Weald Technology Limited.
+// Copyright © 2021, 2022 Weald Technology Limited.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -24,7 +24,8 @@ import (
 var metricsNamespace = "blocks"
 
 var latestBlock prometheus.Gauge
-var blocksProcessed prometheus.Gauge
+var latestBlockHeight uint32
+var blocksProcessed *prometheus.GaugeVec
 
 func registerMetrics(ctx context.Context, monitor metrics.Service) error {
 	if latestBlock != nil {
@@ -51,11 +52,11 @@ func registerPrometheusMetrics(ctx context.Context) error {
 		return errors.Wrap(err, "failed to register latest block")
 	}
 
-	blocksProcessed = prometheus.NewGauge(prometheus.GaugeOpts{
+	blocksProcessed = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: metricsNamespace,
 		Name:      "processed",
 		Help:      "Number of blocks processed",
-	})
+	}, []string{"status"})
 	if err := prometheus.Register(blocksProcessed); err != nil {
 		return errors.Wrap(err, "failed to register blocks processed")
 	}
@@ -63,9 +64,11 @@ func registerPrometheusMetrics(ctx context.Context) error {
 	return nil
 }
 
-func monitorBlockProcessed(height uint32) {
+func monitorBlockProcessed(height uint32, result string) {
 	if blocksProcessed != nil {
-		blocksProcessed.Inc()
-		latestBlock.Set(float64(height))
+		blocksProcessed.WithLabelValues(result).Inc()
+		if result == "succeeded" && height > latestBlockHeight {
+			latestBlock.Set(float64(height))
+		}
 	}
 }
