@@ -250,11 +250,11 @@ func (s *Service) compileTransaction(ctx context.Context,
 		maxPriorityFeePerGas := tx.MaxPriorityFeePerGas()
 		dbTransaction.MaxPriorityFeePerGas = &maxPriorityFeePerGas
 		// Calculate the gas price.
-		feePerGas := maxPriorityFeePerGas
-		if maxPriorityFeePerGas > maxFeePerGas-block.BaseFeePerGas() {
-			feePerGas = maxFeePerGas - block.BaseFeePerGas()
+		priorityFeePerGas := maxFeePerGas - block.BaseFeePerGas()
+		if priorityFeePerGas > maxPriorityFeePerGas {
+			priorityFeePerGas = maxPriorityFeePerGas
 		}
-		dbTransaction.GasPrice = feePerGas
+		dbTransaction.GasPrice = block.BaseFeePerGas() + priorityFeePerGas
 	}
 
 	return dbTransaction
