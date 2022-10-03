@@ -109,6 +109,12 @@ type TransactionsSetter interface {
 	SetTransactions(ctx context.Context, transactions []*Transaction) error
 }
 
+// TransactionBalanceChangesProvider defines function to provide transaction balance changes.
+type TransactionBalanceChangesProvider interface {
+	// TransactionBalanceChanges returns transaction balance changes matching the supplied filter.
+	TransactionBalanceChanges(ctx context.Context, filter *TransactionBalanceChangeFilter) ([]*TransactionBalanceChange, error)
+}
+
 // TransactionStateDiffsProvider defines function to provide transaction state diff information.
 type TransactionStateDiffsProvider interface {
 	// TransactionStateDiff returns transaction state diffs for the supplied hash.

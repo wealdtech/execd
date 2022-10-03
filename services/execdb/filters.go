@@ -154,3 +154,34 @@ type EventFilter struct {
 	// If nil then no filter is applied
 	Address *[]byte
 }
+
+// TransactionBalanceChangeFilter defines a filter for fetching transaction balance changes.
+// Filter elements are ANDed together.
+// Results are always returned in ascending (block height, transaction index) order.
+type TransactionBalanceChangeFilter struct {
+	// Limit is the maximum number of transactions to return.
+	// If nil then there is no limit.
+	Limit *uint32
+
+	// Order is either OrderEarliest, in which case the earliest results
+	// that match the filter are returned, or OrderLatest, in which case the
+	// latest results that match the filter are returned.
+	// The default is OrderEarliest.
+	Order Order
+
+	// From is the height of the earliest block from which to fetch transactions.
+	// If nil then there is no earliest block.
+	From *uint32
+
+	// To is the height of the latest block from which to fetch transactions.
+	// If nil then there is no latest block.
+	To *uint32
+
+	// TxHashes are the transaction hashes for which to obtain balance changes.
+	// If empty then no filter is applied
+	TxHashes [][]byte
+
+	// Addresses are the address for which to obtain balance changes.
+	// If empty then no filter is applied
+	Addresses [][]byte
+}

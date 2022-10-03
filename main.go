@@ -210,7 +210,11 @@ func initProfiling() error {
 		go func() {
 			log.Info().Str("profile_address", profileAddress).Msg("Starting profile server")
 			runtime.SetMutexProfileFraction(1)
-			if err := http.ListenAndServe(profileAddress, nil); err != nil {
+			server := &http.Server{
+				Addr:              profileAddress,
+				ReadHeaderTimeout: 20 * time.Second,
+			}
+			if err := server.ListenAndServe(); err != nil {
 				log.Warn().Str("profile_address", profileAddress).Err(err).Msg("Failed to run profile server")
 			}
 		}()
