@@ -11,6 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package blockrewards gathers information about the payments
+// made to block proposers.
 package blockrewards
 
 // Service defines a block rewards service.

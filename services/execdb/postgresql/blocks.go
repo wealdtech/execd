@@ -69,6 +69,7 @@ FROM t_blocks`)
 	if filter.To != nil {
 		queryVals = append(queryVals, *filter.To)
 		queryBuilder.WriteString(fmt.Sprintf(`
+		wherestr = "  AND"
 %s f_height <= $%d`, wherestr, len(queryVals)))
 	}
 
@@ -83,12 +84,14 @@ FROM t_blocks`)
 		queryVals = append(queryVals, *filter.TimestampTo)
 		queryBuilder.WriteString(fmt.Sprintf(`
 %s f_timestamp <= $%d`, wherestr, len(queryVals)))
+		wherestr = "  AND"
 	}
 
 	if filter.FeeRecipients != nil {
 		queryVals = append(queryVals, *filter.FeeRecipients)
 		queryBuilder.WriteString(fmt.Sprintf(`
 %s f_fee_recipient = ANY($%d)`, wherestr, len(queryVals)))
+		// wherestr = "  AND"
 	}
 
 	switch filter.Order {

@@ -11,6 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package main contains the entrypoint for execd.
 package main
 
 import (
@@ -519,7 +520,7 @@ func startBalances(
 	}
 
 	if len(viper.GetStringSlice("balances.addresses")) == 0 {
-		log.Warn().Msg("Balances module enabled but no balance supplied")
+		log.Warn().Msg("Balances module enabled but no balance supplied; individual balances will not be stored")
 		// Not an error, but the end of our setup.
 		return nil, nil
 	}
