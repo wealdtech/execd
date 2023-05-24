@@ -225,14 +225,16 @@ func (s *Service) fetchBlockTransactions(ctx context.Context,
 			for k, stateDiff := range transactionResults.StateDiff {
 				address := k
 				if s.enableBalanceChanges && stateDiff.Balance != nil {
-					dbBalanceChange := &execdb.TransactionBalanceChange{
-						TransactionHash: transactionResults.TransactionHash[:],
-						BlockHeight:     block.Number(),
-						Address:         address[:],
-						Old:             stateDiff.Balance.From,
-						New:             stateDiff.Balance.To,
+					if stateDiff.Balance.From == nil || stateDiff.Balance.To == nil || stateDiff.Balance.From.Cmp(stateDiff.Balance.To) != 0 {
+						dbBalanceChange := &execdb.TransactionBalanceChange{
+							TransactionHash: transactionResults.TransactionHash[:],
+							BlockHeight:     block.Number(),
+							Address:         address[:],
+							Old:             stateDiff.Balance.From,
+							New:             stateDiff.Balance.To,
+						}
+						dbStateDiff.BalanceChanges = append(dbStateDiff.BalanceChanges, dbBalanceChange)
 					}
-					dbStateDiff.BalanceChanges = append(dbStateDiff.BalanceChanges, dbBalanceChange)
 				}
 
 				if s.enableStorageChanges && stateDiff.Storage != nil {
