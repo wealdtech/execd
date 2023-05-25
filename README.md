@@ -63,7 +63,7 @@ createdb -E UTF8 --owner=exec exec
 `execd` should upgrade automatically from earlier versions.  Note that the upgrade process can take a long time to complete, especially where data needs to be refetched or recalculated.  `execd` should be left to complete the upgrade, to avoid the situation where additional fields are not fully populated.  If this does occur then `execd` can be run with the options `--blocks.start-height=0` to force `execd` to refetch all blocks, although note that it will commonly be faster to restart `execd` with a clean database in this situation.
 
 ## Querying `execd`
-`execd` attempts to lay its data out in a standard fashion for a SQL database, mirroring the data structures that are present in Ethereum.  There are some places where the structure or data deviates from the specification, commonly to provide additional information or to make the data easier to query with SQL.  It is recommended that the [notes on the tables](docs/tables.md) are read before attempting to write any complicated queries.
+`execd` attempts to lay its data out in a standard fashion for a SQL database, mirroring the data structures that are present in Ethereum.  There are some places where the structure or data deviates from the specification, commonly to provide additional information or to make the data easier to query with SQL.  The [database schema](https://github.com/wealdtech/execd/blob/master/services/execdb/postgresql/upgrader.go) can be found in the database module.
 
 ## Configuring `execd`
 The minimal requirements for `execd` are references to the database and execution node, for example:
