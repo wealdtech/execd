@@ -53,7 +53,7 @@ createdb -E UTF8 --owner=exec exec
 ```
 
 ### Execution node
-`execd` supports Erigon consensus nodes.  The current state of obtaining data from consensus nodes is as follows:
+`execd` supports Erigon execution nodes.  The current state of obtaining data from execution nodes is as follows:
 
 - Erigon:
   - must be run without pruning to allow `execd` to obtain historical data
@@ -72,7 +72,7 @@ The minimal requirements for `execd` are references to the database and executio
 execd --execdb.url=postgres://chain:secret@localhost:5432 --execclient.address=http://localhost:8545/
 ```
 
-Here, `execdb.url` is the URL of a local PostgreSQL database with pasword 'secret' and 'execdb.address' is the address of a supported consensus node.
+Here, `execdb.url` is the URL of a local PostgreSQL database with pasword 'secret' and 'execdb.address' is the address of a supported execution node.
 
 `execd` allows additional configuration for itself and its modules.  It takes configuration from the command line, environment variables or a configuration file, but for the purposes of explaining the configuration options the configuration file is used.  This should be in the home directory and called `.execd.yml`.  Alternatively, the configuration file can be placed in a different directory and referenced by `--base-dir`, for example `--base-dir=/home/user/config/execd`; in this case the file should be called `execd.yml` (without the leading period).
 
@@ -98,7 +98,7 @@ execclient:
   # log-level is the log level of the specific module.  If not present the base log
   # level will be used.
   log-level: debug
-  # address is the address of the consensus node.
+  # address is the address of the execution node.
   address: http://localhost:8545/
 # blocks contains configuration for obtaining block-related information.
 blocks:
