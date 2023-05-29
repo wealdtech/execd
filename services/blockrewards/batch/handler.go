@@ -26,10 +26,9 @@ import (
 
 func (s *Service) catchup(ctx context.Context, md *metadata) {
 	// Obtain the height of the latest block in the DB.
-	limit := uint32(1)
 	blocks, err := s.blocksProvider.Blocks(ctx, &execdb.BlockFilter{
 		Order: execdb.OrderLatest,
-		Limit: &limit,
+		Limit: 1,
 	})
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to obtain block for chain height")

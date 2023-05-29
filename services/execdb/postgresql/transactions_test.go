@@ -71,7 +71,7 @@ func TestTransactions(t *testing.T) {
 		{
 			name: "SingleBlockFirstTransaction",
 			filter: &execdb.TransactionFilter{
-				Limit: uint32Ptr(1),
+				Limit: 1,
 				Order: execdb.OrderEarliest,
 				From:  uint32Ptr(11904612),
 				To:    uint32Ptr(11904612),
@@ -81,7 +81,7 @@ func TestTransactions(t *testing.T) {
 		{
 			name: "SingleBlockLastTransaction",
 			filter: &execdb.TransactionFilter{
-				Limit: uint32Ptr(1),
+				Limit: 1,
 				Order: execdb.OrderLatest,
 				From:  uint32Ptr(11904612),
 				To:    uint32Ptr(11904612),
@@ -91,7 +91,7 @@ func TestTransactions(t *testing.T) {
 		{
 			name: "SingleBlockLastTwoTransactions",
 			filter: &execdb.TransactionFilter{
-				Limit: uint32Ptr(2),
+				Limit: 2,
 				Order: execdb.OrderLatest,
 				From:  uint32Ptr(11904612),
 				To:    uint32Ptr(11904612),
@@ -101,7 +101,7 @@ func TestTransactions(t *testing.T) {
 		{
 			name: "SenderTwoTransactions",
 			filter: &execdb.TransactionFilter{
-				Limit:  uint32Ptr(2),
+				Limit:  2,
 				Order:  execdb.OrderEarliest,
 				From:   uint32Ptr(11904612),
 				Sender: addressPtr("0x7183dfa37a3e00045e19a4c99fa63b91e2040289"),
@@ -111,7 +111,7 @@ func TestTransactions(t *testing.T) {
 		{
 			name: "SenderTwoLatestTransactions",
 			filter: &execdb.TransactionFilter{
-				Limit:  uint32Ptr(2),
+				Limit:  2,
 				Order:  execdb.OrderLatest,
 				From:   uint32Ptr(11904611),
 				Sender: addressPtr("0x7183dfa37a3e00045e19a4c99fa63b91e2040289"),

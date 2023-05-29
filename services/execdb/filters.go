@@ -63,8 +63,8 @@ type BalanceFilter struct {
 // Results are always returned in ascending (block height, transaction index) order.
 type TransactionFilter struct {
 	// Limit is the maximum number of transactions to return.
-	// If nil then there is no limit.
-	Limit *uint32
+	// If 0 then there is no limit.
+	Limit uint32
 
 	// Order is either OrderEarliest, in which case the earliest results
 	// that match the filter are returned, or OrderLatest, in which case the
@@ -94,8 +94,8 @@ type TransactionFilter struct {
 // Results are always returned in ascending block height order.
 type BlockFilter struct {
 	// Limit is the maximum number of blocks to return.
-	// If nil then there is no limit.
-	Limit *uint32
+	// If 0 then there is no limit.
+	Limit uint32
 
 	// Order is either OrderEarliest, in which case the earliest results
 	// that match the filter are returned, or OrderLatest, in which case the
@@ -129,8 +129,8 @@ type BlockFilter struct {
 // Results are always returned in ascending (block height, transaction index, event index) order.
 type EventFilter struct {
 	// Limit is the maximum number of events to return.
-	// If nil then there is no limit.
-	Limit *uint32
+	// If zero then there is no limit.
+	Limit uint32
 
 	// Order is either OrderEarliest, in which case the earliest results
 	// that match the filter are returned, or OrderLatest, in which case the
@@ -160,8 +160,8 @@ type EventFilter struct {
 // Results are always returned in ascending (block height, transaction index) order.
 type TransactionBalanceChangeFilter struct {
 	// Limit is the maximum number of transactions to return.
-	// If nil then there is no limit.
-	Limit *uint32
+	// If zero then there is no limit.
+	Limit uint32
 
 	// Order is either OrderEarliest, in which case the earliest results
 	// that match the filter are returned, or OrderLatest, in which case the
