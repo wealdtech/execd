@@ -1,4 +1,4 @@
-// Copyright © 2021, 2022 Weald Technology Trading.
+// Copyright © 2021 - 2023 Weald Technology Trading.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -25,7 +25,6 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"strings"
@@ -36,7 +35,6 @@ import (
 	"github.com/fsnotify/fsnotify"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
-	zerologger "github.com/rs/zerolog/log"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/wealdtech/execd/services/balances"
@@ -57,7 +55,7 @@ import (
 )
 
 // ReleaseVersion is the release version for the code.
-var ReleaseVersion = "0.4.8"
+var ReleaseVersion = "0.4.9-dev"
 
 func main() {
 	os.Exit(main2())
@@ -68,12 +66,12 @@ func main2() int {
 	defer cancel()
 
 	if err := fetchConfig(); err != nil {
-		zerologger.Error().Err(err).Msg("Failed to fetch configuration")
+		fmt.Fprintf(os.Stderr, "failed to fetch configuration: %v\n", err)
 		return 1
 	}
 
 	if err := initLogging(); err != nil {
-		log.Error().Err(err).Msg("Failed to initialise logging")
+		fmt.Fprintf(os.Stderr, "Failed to initialise logging: %v\n", err)
 		return 1
 	}
 
@@ -83,10 +81,18 @@ func main2() int {
 	logModules()
 	log.Info().Str("version", ReleaseVersion).Msg("Starting execd")
 
-	if err := initProfiling(); err != nil {
-		log.Error().Err(err).Msg("Failed to initialise profiling")
+	majordomo, err := util.InitMajordomo(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to initialise majordomo: %v\n", err)
 		return 1
 	}
+
+	if err := initTracing(ctx, majordomo); err != nil {
+		log.Error().Err(err).Msg("Failed to initialise tracing")
+		return 1
+	}
+
+	initProfiling()
 
 	runtime.GOMAXPROCS(runtime.NumCPU() * 8)
 
@@ -124,7 +130,9 @@ func main2() int {
 			}
 			copy(addresses[i][:], tmp)
 		}
-		balances.SetAddresses(addresses)
+		if balances != nil {
+			balances.SetAddresses(addresses)
+		}
 	})
 	viper.WatchConfig()
 
@@ -175,7 +183,7 @@ func fetchConfig() error {
 
 	if viper.GetString("base-dir") != "" {
 		// User-defined base directory.
-		viper.AddConfigPath(resolvePath(""))
+		viper.AddConfigPath(util.ResolvePath(""))
 		viper.SetConfigName("execd")
 	} else {
 		// Home directory.
@@ -205,7 +213,7 @@ func fetchConfig() error {
 }
 
 // initProfiling initialises the profiling server.
-func initProfiling() error {
+func initProfiling() {
 	profileAddress := viper.GetString("profile-address")
 	if profileAddress != "" {
 		go func() {
@@ -220,7 +228,6 @@ func initProfiling() error {
 			}
 		}()
 	}
-	return nil
 }
 
 func startMonitor(ctx context.Context) (metrics.Service, error) {
@@ -334,22 +341,6 @@ func logModules() {
 			log.Msg("Dependency")
 		}
 	}
-}
-
-// resolvePath resolves a potentially relative path to an absolute path.
-func resolvePath(path string) string {
-	if filepath.IsAbs(path) {
-		return path
-	}
-	baseDir := viper.GetString("base-dir")
-	if baseDir == "" {
-		homeDir, err := homedir.Dir()
-		if err != nil {
-			log.Fatal().Err(err).Msg("Could not determine a home directory")
-		}
-		baseDir = homeDir
-	}
-	return filepath.Join(baseDir, path)
 }
 
 func startBlocks(
