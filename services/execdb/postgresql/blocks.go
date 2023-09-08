@@ -69,8 +69,8 @@ FROM t_blocks`)
 	if filter.To != nil {
 		queryVals = append(queryVals, *filter.To)
 		queryBuilder.WriteString(fmt.Sprintf(`
-		wherestr = "  AND"
 %s f_height <= $%d`, wherestr, len(queryVals)))
+		wherestr = "  AND"
 	}
 
 	if filter.TimestampFrom != nil {
