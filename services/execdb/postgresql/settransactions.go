@@ -83,6 +83,12 @@ func (s *Service) SetTransactions(ctx context.Context, transactions []*execdb.Tr
 				input = &transactions[i].Input
 			}
 
+			// Bytes() returns an empty string for 0x00, so need to work around that here.
+			v := transactions[i].V.Bytes()
+			if len(v) == 0 {
+				v = []byte{0x00}
+			}
+
 			return []interface{}{
 				transactions[i].BlockHeight,
 				transactions[i].BlockHash,
@@ -102,7 +108,7 @@ func (s *Service) SetTransactions(ctx context.Context, transactions []*execdb.Tr
 				transactions[i].S.Bytes(),
 				transactions[i].Status,
 				transactions[i].To,
-				transactions[i].V.Bytes(),
+				v,
 				decimal.NewFromBigInt(transactions[i].Value, 0),
 			}, nil
 		}))

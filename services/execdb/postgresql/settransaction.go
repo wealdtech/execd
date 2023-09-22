@@ -38,6 +38,12 @@ func (s *Service) SetTransaction(ctx context.Context, transaction *execdb.Transa
 		input = &transaction.Input
 	}
 
+	// Bytes() returns an empty string for 0x00, so need to work around that here.
+	v := transaction.V.Bytes()
+	if len(v) == 0 {
+		v = []byte{0x00}
+	}
+
 	_, err := tx.Exec(ctx, `
 INSERT INTO t_transactions(f_block_height
                           ,f_block_hash
@@ -100,7 +106,7 @@ SET f_block_height = excluded.f_block_height
 		transaction.S.Bytes(),
 		transaction.Status,
 		transaction.To,
-		transaction.V.Bytes(),
+		v,
 		decimal.NewFromBigInt(transaction.Value, 0),
 	)
 	if err != nil {
