@@ -88,6 +88,7 @@ func New(ctx context.Context, params ...Parameter) (*Service, error) {
 	}
 
 	config.AfterConnect = registerCustomTypes
+	config.ConnConfig.TLSConfig = tlsConfig
 	config.ConnConfig.Tracer = &tracelog.TraceLog{Logger: zerologadapter.NewLogger(log)}
 
 	pool, err = pgxpool.NewWithConfig(context.Background(), config)
