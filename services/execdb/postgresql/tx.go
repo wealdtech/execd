@@ -16,15 +16,13 @@ package postgresql
 import (
 	"context"
 
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
 	"github.com/pkg/errors"
 )
 
-var (
-	// ErrNoTransaction is returned when an attempt to carry out a mutation to the database
-	// is not inside a transaction.
-	ErrNoTransaction = errors.New("no transaction for action")
-)
+// ErrNoTransaction is returned when an attempt to carry out a mutation to the database
+// is not inside a transaction.
+var ErrNoTransaction = errors.New("no transaction for action")
 
 // Tx is a context tag for the database transaction.
 type Tx struct{}

@@ -16,8 +16,7 @@ package postgresql
 import (
 	"context"
 
-	"github.com/jackc/pgtype"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
 	"github.com/pkg/errors"
 )
 
@@ -55,21 +54,20 @@ func (s *Service) Metadata(ctx context.Context, key string) ([]byte, error) {
 	}
 	tx := s.tx(ctx)
 
-	res := &pgtype.JSONB{}
+	res := make([]byte, 0)
 	err := tx.QueryRow(ctx, `
       SELECT f_value
       FROM t_metadata
       WHERE f_key = $1`,
 		key).Scan(
-		res,
+		&res,
 	)
-
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, errors.Wrap(err, "failed to obtain metadata")
 	}
 
-	return res.Bytes, nil
+	return res, nil
 }

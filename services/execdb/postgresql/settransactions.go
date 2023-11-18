@@ -17,7 +17,7 @@ import (
 	"context"
 	"encoding/hex"
 
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
 	"github.com/pkg/errors"
 	"github.com/shopspring/decimal"
 	"github.com/wealdtech/execd/services/execdb"

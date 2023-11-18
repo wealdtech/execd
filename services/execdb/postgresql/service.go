@@ -20,10 +20,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jackc/pgtype"
-	shopspring "github.com/jackc/pgtype/ext/shopspring-numeric"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
+	pgxdecimal "github.com/jackc/pgx-shopspring-decimal"
+	zerologadapter "github.com/jackc/pgx-zerolog"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/tracelog"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	zerologger "github.com/rs/zerolog/log"
@@ -85,10 +86,11 @@ func New(ctx context.Context, params ...Parameter) (*Service, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to generate pgx config")
 	}
-	config.AfterConnect = registerCustomTypes
-	config.ConnConfig.TLSConfig = tlsConfig
 
-	pool, err = pgxpool.ConnectConfig(context.Background(), config)
+	config.AfterConnect = registerCustomTypes
+	config.ConnConfig.Tracer = &tracelog.TraceLog{Logger: zerologadapter.NewLogger(log)}
+
+	pool, err = pgxpool.NewWithConfig(context.Background(), config)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to connect to database")
 	}
@@ -107,10 +109,7 @@ func New(ctx context.Context, params ...Parameter) (*Service, error) {
 }
 
 func registerCustomTypes(ctx context.Context, conn *pgx.Conn) error {
-	conn.ConnInfo().RegisterDataType(pgtype.DataType{
-		Value: &shopspring.Numeric{},
-		Name:  "numeric",
-		OID:   pgtype.NumericOID,
-	})
+	pgxdecimal.Register(conn.TypeMap())
+
 	return nil
 }
