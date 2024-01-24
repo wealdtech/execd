@@ -15,6 +15,7 @@ package postgresql
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"sort"
 	"strings"
@@ -55,43 +56,40 @@ SELECT f_height
       ,f_timestamp
       ,f_total_difficulty
       ,f_issuance
+      ,f_blob_gas_used
+      ,f_excess_blob_gas
 FROM t_blocks`)
 
-	wherestr := "WHERE"
+	conditions := make([]string, 0)
 
 	if filter.From != nil {
 		queryVals = append(queryVals, *filter.From)
-		queryBuilder.WriteString(fmt.Sprintf(`
-%s f_height >= $%d`, wherestr, len(queryVals)))
-		wherestr = "  AND"
+		conditions = append(conditions, fmt.Sprintf("f_height >= $%d", len(queryVals)))
 	}
 
 	if filter.To != nil {
 		queryVals = append(queryVals, *filter.To)
-		queryBuilder.WriteString(fmt.Sprintf(`
-%s f_height <= $%d`, wherestr, len(queryVals)))
-		wherestr = "  AND"
+		conditions = append(conditions, fmt.Sprintf("f_height <= $%d", len(queryVals)))
 	}
 
 	if filter.TimestampFrom != nil {
 		queryVals = append(queryVals, *filter.TimestampFrom)
-		queryBuilder.WriteString(fmt.Sprintf(`
-%s f_timestamp >= $%d`, wherestr, len(queryVals)))
-		wherestr = "  AND"
+		conditions = append(conditions, fmt.Sprintf("f_timestamp >= $%d", len(queryVals)))
 	}
 
 	if filter.TimestampTo != nil {
 		queryVals = append(queryVals, *filter.TimestampTo)
-		queryBuilder.WriteString(fmt.Sprintf(`
-%s f_timestamp <= $%d`, wherestr, len(queryVals)))
-		wherestr = "  AND"
+		conditions = append(conditions, fmt.Sprintf("f_timestamp <= $%d", len(queryVals)))
 	}
 
 	if filter.FeeRecipients != nil {
 		queryVals = append(queryVals, *filter.FeeRecipients)
-		queryBuilder.WriteString(fmt.Sprintf(`
-%s f_fee_recipient = ANY($%d)`, wherestr, len(queryVals)))
-		// wherestr = "  AND"
+		conditions = append(conditions, fmt.Sprintf("f_fee_recipient = ANY($%d)", len(queryVals)))
+	}
+
+	if len(conditions) > 0 {
+		queryBuilder.WriteString("\nWHERE ")
+		queryBuilder.WriteString(strings.Join(conditions, "\n  AND "))
 	}
 
 	switch filter.Order {
@@ -131,6 +129,8 @@ LIMIT $%d`, len(queryVals)))
 	blocks := make([]*execdb.Block, 0)
 	var totalDifficulty decimal.Decimal
 	var issuance decimal.NullDecimal
+	var blobGasUsed sql.NullInt64
+	var excessBlobGas sql.NullInt64
 	for rows.Next() {
 		block := &execdb.Block{}
 		err := rows.Scan(
@@ -148,6 +148,8 @@ LIMIT $%d`, len(queryVals)))
 			&block.Timestamp,
 			&totalDifficulty,
 			&issuance,
+			&blobGasUsed,
+			&excessBlobGas,
 		)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to scan row")
@@ -155,6 +157,14 @@ LIMIT $%d`, len(queryVals)))
 		block.TotalDifficulty = totalDifficulty.BigInt()
 		if issuance.Valid {
 			block.Issuance = issuance.Decimal.BigInt()
+		}
+		if blobGasUsed.Valid {
+			tmp := uint64(blobGasUsed.Int64)
+			block.BlobGasUsed = &tmp
+		}
+		if excessBlobGas.Valid {
+			tmp := uint64(excessBlobGas.Int64)
+			block.ExcessBlobGas = &tmp
 		}
 		blocks = append(blocks, block)
 	}

@@ -1,4 +1,4 @@
-// Copyright © 2021, 2022 Weald Technology Trading.
+// Copyright © 2021 - 2023 Weald Technology Trading.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -148,6 +148,10 @@ func (s *Service) handleBlock(ctx context.Context,
 	feeRecipient := block.FeeRecipient()
 	parentHash := block.ParentHash()
 	stateRoot := block.StateRoot()
+	parentBeaconBlockRoot, parentBeaconBlockRootExists := block.ParentBeaconBlockRoot()
+	withdrawalsRoot, withdrawalsRootExists := block.WithdrawalsRoot()
+	blobGasUsed, blobGasUsedExists := block.BlobGasUsed()
+	excessBlobGas, excessBlobGasExists := block.ExcessBlobGas()
 	dbBlock := &execdb.Block{
 		Height:          block.Number(),
 		Hash:            hash[:],
@@ -164,6 +168,18 @@ func (s *Service) handleBlock(ctx context.Context,
 		TotalDifficulty: block.TotalDifficulty(),
 	}
 
+	if parentBeaconBlockRootExists {
+		dbBlock.ParentBeaconBlockRoot = parentBeaconBlockRoot[:]
+	}
+	if withdrawalsRootExists {
+		dbBlock.WithdrawalsRoot = withdrawalsRoot[:]
+	}
+	if blobGasUsedExists {
+		dbBlock.BlobGasUsed = &blobGasUsed
+	}
+	if excessBlobGasExists {
+		dbBlock.ExcessBlobGas = &excessBlobGas
+	}
 	if s.issuanceProvider != nil {
 		issuance, err := s.issuanceProvider.Issuance(ctx, fmt.Sprintf("%d", block.Number()))
 		if err != nil {
@@ -293,13 +309,13 @@ func (s *Service) compileTransaction(ctx context.Context,
 		V:     tx.V(),
 		Value: tx.Value(),
 	}
-	if tx.Type == 1 || tx.Type == 2 {
+	if tx.Type == 1 || tx.Type == 2 || tx.Type == 3 {
 		dbTransaction.AccessList = make(map[string][][]byte)
 		for _, entry := range tx.AccessList() {
 			dbTransaction.AccessList[fmt.Sprintf("%x", entry.Address)] = entry.StorageKeys
 		}
 	}
-	if tx.Type == 2 {
+	if tx.Type == 2 || tx.Type == 3 {
 		maxFeePerGas := tx.MaxFeePerGas()
 		dbTransaction.MaxFeePerGas = &maxFeePerGas
 		maxPriorityFeePerGas := tx.MaxPriorityFeePerGas()
@@ -310,6 +326,28 @@ func (s *Service) compileTransaction(ctx context.Context,
 			priorityFeePerGas = maxPriorityFeePerGas
 		}
 		dbTransaction.GasPrice = block.BaseFeePerGas() + priorityFeePerGas
+	}
+	if tx.Type == 3 {
+		txBlobVersionedHashes := tx.BlobVersionedHashes()
+		blobVersionedHashes := make([][]byte, len(txBlobVersionedHashes))
+		for i, blobVersionedHash := range txBlobVersionedHashes {
+			blobVersionedHashes[i] = blobVersionedHash[:]
+		}
+		dbTransaction.BlobVersionedHashes = &blobVersionedHashes
+		maxFeePerGas := tx.MaxFeePerGas()
+		dbTransaction.MaxFeePerGas = &maxFeePerGas
+		maxPriorityFeePerGas := tx.MaxPriorityFeePerGas()
+		dbTransaction.MaxPriorityFeePerGas = &maxPriorityFeePerGas
+		// Calculate the gas price.
+		priorityFeePerGas := maxFeePerGas - block.BaseFeePerGas()
+		if priorityFeePerGas > maxPriorityFeePerGas {
+			priorityFeePerGas = maxPriorityFeePerGas
+		}
+		dbTransaction.GasPrice = block.BaseFeePerGas() + priorityFeePerGas
+
+		maxFeePerBlobGas := tx.MaxFeePerBlobGas()
+		dbTransaction.MaxFeePerBlobGas = &maxFeePerBlobGas
+		dbTransaction.BlobGasUsed = tx.BlobGasUsed()
 	}
 
 	return dbTransaction
@@ -326,24 +364,32 @@ func (s *Service) addTransactionReceiptInfo(ctx context.Context,
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to obtain transaction receipt")
 	}
-	if receipt.GasUsed > 0 {
-		dbTransaction.GasUsed = receipt.GasUsed
-		dbTransaction.Status = receipt.Status
+	if receipt.GasUsed() > 0 {
+		dbTransaction.GasUsed = receipt.GasUsed()
+		dbTransaction.Status = receipt.Status()
 	}
-	if receipt.ContractAddress != nil {
-		tmp := receipt.ContractAddress[:]
-		dbTransaction.ContractAddress = &tmp
+	if receipt.ContractAddress() != nil {
+		tmp := *receipt.ContractAddress()
+		addr := tmp[:]
+		dbTransaction.ContractAddress = &addr
+	}
+	if receipt.BlobGasPrice() != nil {
+		dbTransaction.BlobGasPrice = receipt.BlobGasPrice()
+	}
+	if receipt.BlobGasUsed() > 0 {
+		tmp := receipt.BlobGasUsed()
+		dbTransaction.BlobGasUsed = &tmp
 	}
 
-	dbEvents := make([]*execdb.Event, 0, len(receipt.Logs))
-	for _, event := range receipt.Logs {
+	dbEvents := make([]*execdb.Event, 0, len(receipt.Logs()))
+	for _, event := range receipt.Logs() {
 		topics := make([][]byte, len(event.Topics))
 		for i := range event.Topics {
 			topics[i] = event.Topics[i][:]
 		}
 		dbEvents = append(dbEvents, &execdb.Event{
 			TransactionHash: dbTransaction.Hash,
-			BlockHeight:     receipt.BlockNumber,
+			BlockHeight:     receipt.BlockNumber(),
 			Index:           event.Index,
 			Address:         event.Address[:],
 			Topics:          topics,
@@ -358,6 +404,11 @@ func (s *Service) store(ctx context.Context,
 	md *metadata,
 	bd *batchData,
 ) error {
+	if len(bd.blocks) == 0 {
+		// Nothing to store.
+		return nil
+	}
+
 	ctx, cancel, err := s.blocksSetter.BeginTx(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to begin transaction")

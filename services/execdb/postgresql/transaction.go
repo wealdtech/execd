@@ -59,6 +59,10 @@ SELECT f_block_height
       ,f_to
       ,f_v
       ,f_value
+	  ,f_y_parity
+	  ,f_max_fee_per_blob_gas
+	  ,f_blob_versioned_hashes
+	  ,f_blob_gas_used
 FROM t_transactions
 WHERE f_hash = $1`,
 		hash).Scan(
@@ -81,6 +85,10 @@ WHERE f_hash = $1`,
 		&transaction.To,
 		&sigV,
 		&value,
+		&transaction.YParity,
+		&transaction.MaxFeePerBlobGas,
+		&transaction.BlobVersionedHashes,
+		&transaction.BlobGasUsed,
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to scan row")

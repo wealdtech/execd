@@ -1,4 +1,4 @@
-// Copyright © 2021, 2022 Weald Technology Trading.
+// Copyright © 2021 - 2023 Weald Technology Trading.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -25,7 +25,7 @@ type schemaMetadata struct {
 	Version uint64 `json:"version"`
 }
 
-var currentVersion = uint64(8)
+var currentVersion = uint64(9)
 
 type upgrade struct {
 	funcs []func(context.Context, *Service) error
@@ -66,6 +66,12 @@ var upgrades = map[uint64]*upgrade{
 	8: {
 		funcs: []func(context.Context, *Service) error{
 			addTransactionStorageForeignKey,
+		},
+	},
+	9: {
+		funcs: []func(context.Context, *Service) error{
+			addCancunBlockFields,
+			addCancunTransactionFields,
 		},
 	},
 }
@@ -251,24 +257,28 @@ CREATE TABLE t_metadata (
  ,f_value JSONB NOT NULL
 );
 CREATE UNIQUE INDEX i_metadata_1 ON t_metadata(f_key);
-INSERT INTO t_metadata VALUES('schema', '{"version": 8}');
+INSERT INTO t_metadata VALUES('schema', '{"version": 9}');
 
 -- t_blocks contains execution layer blocks.
 CREATE TABLE t_blocks (
-  f_height           INTEGER NOT NULL
- ,f_hash             BYTEA NOT NULL
- ,f_base_fee         BIGINT
- ,f_difficulty       BIGINT NOT NULL
- ,f_extra_data       BYTEA NOT NULL
- ,f_gas_limit        INTEGER NOT NULL
- ,f_gas_used         INTEGER NOT NULL
- ,f_fee_recipient    BYTEA NOT NULL
- ,f_parent_hash      BYTEA NOT NULL -- cannot enforce contraint here as parent of block 0 is 0
- ,f_size             INTEGER NOT NULL
- ,f_state_root       BYTEA NOT NULL
- ,f_timestamp        TIMESTAMPTZ NOT NULL
- ,f_total_difficulty NUMERIC NOT NULL
- ,f_issuance         NUMERIC
+  f_height                   INTEGER NOT NULL
+ ,f_hash                     BYTEA NOT NULL
+ ,f_base_fee                 BIGINT
+ ,f_blob_gas_used            BIGINT
+ ,f_difficulty               BIGINT NOT NULL
+ ,f_excess_blob_gas          INTEGER
+ ,f_extra_data               BYTEA NOT NULL
+ ,f_gas_limit                INTEGER NOT NULL
+ ,f_gas_used                 INTEGER NOT NULL
+ ,f_fee_recipient            BYTEA NOT NULL
+ ,f_parent_beacon_block_root BYTEA
+ ,f_parent_hash              BYTEA NOT NULL -- cannot enforce contraint here as parent of block 0 is 0
+ ,f_size                     INTEGER NOT NULL
+ ,f_state_root               BYTEA NOT NULL
+ ,f_withdrawals_root         BYTEA
+ ,f_timestamp                TIMESTAMPTZ NOT NULL
+ ,f_total_difficulty         NUMERIC NOT NULL
+ ,f_issuance                 NUMERIC
 );
 CREATE UNIQUE INDEX i_blocks_1 ON t_blocks(f_height,f_hash);
 CREATE UNIQUE INDEX i_blocks_2 ON t_blocks(f_hash);
@@ -297,6 +307,11 @@ CREATE TABLE t_transactions (
  ,f_to                       BYTEA
  ,f_v                        BYTEA NOT NULL
  ,f_value                    NUMERIC NOT NULL
+ ,f_y_parity                 BOOLEAN
+ ,f_max_fee_per_blob_gas     BIGINT
+ ,f_blob_versioned_hashes    BYTEA[]
+ ,f_blob_gas_price           BIGINT
+ ,f_blob_gas_used            BIGINT
 );
 CREATE UNIQUE INDEX i_transactions_1 ON t_transactions(f_block_hash,f_index);
 CREATE INDEX i_transactions_2 ON t_transactions(f_from,f_block_height);
@@ -736,6 +751,89 @@ func addTransactionStorageForeignKey(ctx context.Context, s *Service) error {
 ALTER TABLE t_transaction_storage_changes ADD FOREIGN KEY(f_transaction_hash) REFERENCES t_transactions(f_hash) ON DELETE CASCADE;
 `); err != nil {
 		return errors.Wrap(err, "failed to add foreign key to t_transaction_storage_changes")
+	}
+
+	return nil
+}
+
+// addCancunBlockFields adds fields to the t_blocks table.
+func addCancunBlockFields(ctx context.Context, s *Service) error {
+	tx := s.tx(ctx)
+	if tx == nil {
+		return ErrNoTransaction
+	}
+
+	if _, err := tx.Exec(ctx, `
+ALTER TABLE t_blocks
+ADD COLUMN f_blob_gas_used BIGINT
+`); err != nil {
+		return errors.Wrap(err, "failed to add f_blob_gas_used to t_blocks")
+	}
+
+	if _, err := tx.Exec(ctx, `
+ALTER TABLE t_blocks
+ADD COLUMN f_excess_blob_gas INTEGER
+`); err != nil {
+		return errors.Wrap(err, "failed to add f_excess_blob_gas to t_blocks")
+	}
+
+	if _, err := tx.Exec(ctx, `
+ALTER TABLE t_blocks
+ADD COLUMN f_withdrawals_root BYTEA
+`); err != nil {
+		return errors.Wrap(err, "failed to add f_withdrawals_root to t_blocks")
+	}
+
+	if _, err := tx.Exec(ctx, `
+ALTER TABLE t_blocks
+ADD COLUMN f_parent_beacon_block_root BYTEA
+`); err != nil {
+		return errors.Wrap(err, "failed to add f_parent_beacon_block_root to t_blocks")
+	}
+
+	return nil
+}
+
+// addCancunTransactionFields adds fields to the t_transactions table.
+func addCancunTransactionFields(ctx context.Context, s *Service) error {
+	tx := s.tx(ctx)
+	if tx == nil {
+		return ErrNoTransaction
+	}
+
+	if _, err := tx.Exec(ctx, `
+ALTER TABLE t_transactions
+ADD COLUMN f_max_fee_per_blob_gas BIGINT
+`); err != nil {
+		return errors.Wrap(err, "failed to add f_max_fee_per_blob_gas to t_transactions")
+	}
+
+	if _, err := tx.Exec(ctx, `
+ALTER TABLE t_transactions
+ADD COLUMN f_y_parity BOOLEAN
+`); err != nil {
+		return errors.Wrap(err, "failed to add f_y_parity to t_transactions")
+	}
+
+	if _, err := tx.Exec(ctx, `
+ALTER TABLE t_transactions
+ADD COLUMN f_blob_versioned_hashes BYTEA[]
+`); err != nil {
+		return errors.Wrap(err, "failed to add f_blob_versioned_hashes to t_transactions")
+	}
+
+	if _, err := tx.Exec(ctx, `
+ALTER TABLE t_transactions
+ADD COLUMN f_blob_gas_price BIGINT
+`); err != nil {
+		return errors.Wrap(err, "failed to add f_blob_gas_price to t_transactions")
+	}
+
+	if _, err := tx.Exec(ctx, `
+ALTER TABLE t_transactions
+ADD COLUMN f_blob_gas_used BIGINT
+`); err != nil {
+		return errors.Wrap(err, "failed to add f_blob_gas_used to t_transactions")
 	}
 
 	return nil

@@ -1,4 +1,4 @@
-// Copyright © 2021, 2022 Weald Technology Trading.
+// Copyright © 2021 - 2024 Weald Technology Trading.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -76,8 +76,13 @@ func (s *Service) SetTransactions(ctx context.Context, transactions []*execdb.Tr
 			"f_to",
 			"f_v",
 			"f_value",
+			"f_y_parity",
+			"f_max_fee_per_blob_gas",
+			"f_blob_versioned_hashes",
+			"f_blob_gas_price",
+			"f_blob_gas_used",
 		},
-		pgx.CopyFromSlice(len(transactions), func(i int) ([]interface{}, error) {
+		pgx.CopyFromSlice(len(transactions), func(i int) ([]any, error) {
 			var input *[]byte
 			if len(transactions[i].Input) > 0 {
 				input = &transactions[i].Input
@@ -89,7 +94,13 @@ func (s *Service) SetTransactions(ctx context.Context, transactions []*execdb.Tr
 				v = []byte{0x00}
 			}
 
-			return []interface{}{
+			var blobGasUsed *decimal.Decimal
+			if transactions[i].BlobGasPrice != nil {
+				dec := decimal.NewFromBigInt(transactions[i].BlobGasPrice, 0)
+				blobGasUsed = &dec
+			}
+
+			return []any{
 				transactions[i].BlockHeight,
 				transactions[i].BlockHash,
 				transactions[i].ContractAddress,
@@ -110,6 +121,11 @@ func (s *Service) SetTransactions(ctx context.Context, transactions []*execdb.Tr
 				transactions[i].To,
 				v,
 				decimal.NewFromBigInt(transactions[i].Value, 0),
+				transactions[i].YParity,
+				transactions[i].MaxFeePerBlobGas,
+				transactions[i].BlobVersionedHashes,
+				blobGasUsed,
+				transactions[i].BlobGasUsed,
 			}, nil
 		}))
 
@@ -122,8 +138,8 @@ func (s *Service) SetTransactions(ctx context.Context, transactions []*execdb.Tr
 				"f_address",
 				"f_storage_keys",
 			},
-			pgx.CopyFromSlice(len(accessLists), func(i int) ([]interface{}, error) {
-				return []interface{}{
+			pgx.CopyFromSlice(len(accessLists), func(i int) ([]any, error) {
+				return []any{
 					accessLists[i].TransactionHash,
 					accessLists[i].BlockHeight,
 					accessLists[i].Address,

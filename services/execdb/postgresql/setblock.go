@@ -1,4 +1,4 @@
-// Copyright © 2021 Weald Technology Trading.
+// Copyright © 2021, 2024 Weald Technology Trading.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -52,8 +52,10 @@ INSERT INTO t_blocks(f_height
                     ,f_timestamp
                     ,f_total_difficulty
                     ,f_issuance
+                    ,f_blob_gas_used
+                    ,f_excess_blob_gas
                     )
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 ON CONFLICT (f_hash) DO
 UPDATE
 SET f_height = excluded.f_height
@@ -68,6 +70,8 @@ SET f_height = excluded.f_height
    ,f_state_root = excluded.f_state_root
    ,f_timestamp = excluded.f_timestamp
    ,f_total_difficulty = excluded.f_total_difficulty
+   ,f_blob_gas_used = excluded.f_blob_gas_used
+   ,f_excess_blob_gas = excluded.f_excess_blob_gas
 `,
 		block.Height,
 		block.Hash,
@@ -83,6 +87,8 @@ SET f_height = excluded.f_height
 		block.Timestamp,
 		decimal.NewFromBigInt(block.TotalDifficulty, 0),
 		issuance,
+		block.BlobGasUsed,
+		block.ExcessBlobGas,
 	)
 
 	return err

@@ -1,4 +1,4 @@
-// Copyright © 2021 - 2023 Weald Technology Trading.
+// Copyright © 2021 - 2024 Weald Technology Trading.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -55,7 +55,7 @@ import (
 )
 
 // ReleaseVersion is the release version for the code.
-var ReleaseVersion = "0.4.12"
+var ReleaseVersion = "0.5.0"
 
 func main() {
 	os.Exit(main2())
@@ -392,6 +392,10 @@ func startBlocks(
 	if !isProvider {
 		return nil, errors.New("client does not provide transaction receipts")
 	}
+	// blockTransactionReceiptsProvider, isProvider := execClient.(execclient.BlockTransactionReceiptsProvider)
+	// if !isProvider {
+	// 	return nil, errors.New("client does not provide block transaction receipts")
+	// }
 	blocksSetter, isSetter := execDB.(execdb.BlocksSetter)
 	if !isSetter {
 		return nil, errors.New("database does not store blocks")
@@ -413,7 +417,7 @@ func startBlocks(
 	switch viper.GetString("blocks.style") {
 	case "individual":
 		s, err = individualblocks.New(ctx,
-			individualblocks.WithLogLevel(util.LogLevel("blocks")),
+			individualblocks.WithLogLevel(util.LogLevel("blocks.individual")),
 			individualblocks.WithMonitor(monitor),
 			individualblocks.WithScheduler(scheduler),
 			individualblocks.WithChainHeightProvider(chainHeightProvider),
@@ -435,7 +439,7 @@ func startBlocks(
 		)
 	case "batch":
 		s, err = batchblocks.New(ctx,
-			batchblocks.WithLogLevel(util.LogLevel("blocks")),
+			batchblocks.WithLogLevel(util.LogLevel("blocks.batch")),
 			batchblocks.WithMonitor(monitor),
 			batchblocks.WithScheduler(scheduler),
 			batchblocks.WithChainHeightProvider(chainHeightProvider),
@@ -443,6 +447,7 @@ func startBlocks(
 			batchblocks.WithBlockReplaysProvider(blockReplaysProvider),
 			batchblocks.WithIssuanceProvider(issuanceProvider),
 			batchblocks.WithTransactionReceiptsProvider(transactionReceiptsProvider),
+			// batchblocks.WithBlockTransactionReceiptsProvider(blockTransactionReceiptsProvider),
 			batchblocks.WithBlocksSetter(blocksSetter),
 			batchblocks.WithTransactionsSetter(transactionsSetter),
 			batchblocks.WithTransactionStateDiffsSetter(transactionStateDiffsSetter),

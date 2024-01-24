@@ -1,4 +1,4 @@
-// Copyright © 2021 Weald Technology Trading.
+// Copyright © 2021, 2024 Weald Technology Trading.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -65,8 +65,13 @@ INSERT INTO t_transactions(f_block_height
                           ,f_to
                           ,f_v
                           ,f_value
+                          ,f_y_parity
+                          ,f_max_fee_per_blob_gas
+                          ,f_blob_versioned_hashes
+                          ,f_blob_gas_price
+                          ,f_blob_gas_used
                           )
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
 ON CONFLICT (f_block_hash,f_index) DO
 UPDATE
 SET f_block_height = excluded.f_block_height
@@ -87,6 +92,11 @@ SET f_block_height = excluded.f_block_height
    ,f_to = excluded.f_to
    ,f_v = excluded.f_v
    ,f_value = excluded.f_value
+   ,f_y_parity = excluded.f_y_parity
+   ,f_max_fee_per_blob_gas = excluded.f_max_fee_per_blob_gas
+   ,f_blob_versioned_hashes = excluded.f_blob_versioned_hashes
+   ,f_blob_gas_price = excluded.f_blob_gas_price
+   ,f_blob_gas_used = excluded.f_blob_gas_used
 `,
 		transaction.BlockHeight,
 		transaction.BlockHash,
@@ -108,6 +118,11 @@ SET f_block_height = excluded.f_block_height
 		transaction.To,
 		v,
 		decimal.NewFromBigInt(transaction.Value, 0),
+		transaction.YParity,
+		transaction.MaxFeePerBlobGas,
+		transaction.BlobVersionedHashes,
+		transaction.BlobGasPrice,
+		transaction.BlobGasUsed,
 	)
 	if err != nil {
 		return err

@@ -271,24 +271,26 @@ func (s *Service) addTransactionReceiptInfo(ctx context.Context,
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to obtain transaction receipt")
 	}
-	if receipt.GasUsed > 0 {
-		dbTransaction.GasUsed = receipt.GasUsed
-		dbTransaction.Status = receipt.Status
+	// TODO cancun receipt info.
+	if receipt.GasUsed() > 0 {
+		dbTransaction.GasUsed = receipt.GasUsed()
+		dbTransaction.Status = receipt.Status()
 	}
-	if receipt.ContractAddress != nil {
-		tmp := receipt.ContractAddress[:]
-		dbTransaction.ContractAddress = &tmp
+	if receipt.ContractAddress() != nil {
+		tmp := *receipt.ContractAddress()
+		addr := tmp[:]
+		dbTransaction.ContractAddress = &addr
 	}
 
-	dbEvents := make([]*execdb.Event, 0, len(receipt.Logs))
-	for _, event := range receipt.Logs {
+	dbEvents := make([]*execdb.Event, 0, len(receipt.Logs()))
+	for _, event := range receipt.Logs() {
 		topics := make([][]byte, len(event.Topics))
 		for i := range event.Topics {
 			topics[i] = event.Topics[i][:]
 		}
 		dbEvents = append(dbEvents, &execdb.Event{
 			TransactionHash: dbTransaction.Hash,
-			BlockHeight:     receipt.BlockNumber,
+			BlockHeight:     receipt.BlockNumber(),
 			Index:           event.Index,
 			Address:         event.Address[:],
 			Topics:          topics,

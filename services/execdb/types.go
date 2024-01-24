@@ -32,20 +32,24 @@ type Balance struct {
 
 // Block holds information about a block.
 type Block struct {
-	Height          uint32
-	Hash            []byte
-	BaseFee         uint64
-	Difficulty      uint64
-	ExtraData       []byte
-	GasLimit        uint32
-	GasUsed         uint32
-	FeeRecipient    []byte
-	ParentHash      []byte
-	Size            uint32
-	StateRoot       []byte
-	Timestamp       time.Time
-	TotalDifficulty *big.Int
-	Issuance        *big.Int
+	Height                uint32
+	Hash                  []byte
+	BaseFee               uint64
+	Difficulty            uint64
+	ExtraData             []byte
+	GasLimit              uint32
+	GasUsed               uint32
+	FeeRecipient          []byte
+	ParentBeaconBlockRoot []byte
+	ParentHash            []byte
+	Size                  uint32
+	StateRoot             []byte
+	WithdrawalsRoot       []byte
+	Timestamp             time.Time
+	TotalDifficulty       *big.Int
+	Issuance              *big.Int
+	BlobGasUsed           *uint64
+	ExcessBlobGas         *uint64
 }
 
 // Transaction holds information about a transaction.
@@ -64,6 +68,10 @@ type Transaction struct {
 	Input                []byte
 	MaxFeePerGas         *uint64
 	MaxPriorityFeePerGas *uint64
+	MaxFeePerBlobGas     *uint64
+	BlobGasPrice         *big.Int
+	BlobGasUsed          *uint32
+	BlobVersionedHashes  *[][]byte
 	Nonce                uint64
 	R                    *big.Int
 	S                    *big.Int
@@ -71,6 +79,7 @@ type Transaction struct {
 	To                   *[]byte
 	V                    *big.Int
 	Value                *big.Int
+	YParity              *bool
 }
 
 // TransactionAccessListEntry holds information about a transaction access list.

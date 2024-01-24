@@ -1,4 +1,4 @@
-// Copyright © 2021 Weald Technology Trading.
+// Copyright © 2021, 2024 Weald Technology Trading.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -52,12 +52,24 @@ func (s *Service) SetBlocks(ctx context.Context, blocks []*execdb.Block) error {
 			"f_timestamp",
 			"f_total_difficulty",
 			"f_issuance",
+			"f_withdrawals_root",
+			"f_parent_beacon_block_root",
+			"f_blob_gas_used",
+			"f_excess_blob_gas",
 		},
 		pgx.CopyFromSlice(len(blocks), func(i int) ([]interface{}, error) {
 			var issuance *decimal.Decimal
 			if blocks[i].Issuance != nil {
 				tmp := decimal.NewFromBigInt(blocks[i].Issuance, 0)
 				issuance = &tmp
+			}
+			var withdrawalsRoot []byte
+			if len(blocks[i].WithdrawalsRoot) > 0 {
+				withdrawalsRoot = blocks[i].WithdrawalsRoot
+			}
+			var parentBeaconBlockRoot []byte
+			if len(blocks[i].ParentBeaconBlockRoot) > 0 {
+				parentBeaconBlockRoot = blocks[i].ParentBeaconBlockRoot
 			}
 			return []interface{}{
 				blocks[i].Height,
@@ -74,6 +86,10 @@ func (s *Service) SetBlocks(ctx context.Context, blocks []*execdb.Block) error {
 				blocks[i].Timestamp,
 				decimal.NewFromBigInt(blocks[i].TotalDifficulty, 0),
 				issuance,
+				withdrawalsRoot,
+				parentBeaconBlockRoot,
+				blocks[i].BlobGasUsed,
+				blocks[i].ExcessBlobGas,
 			}, nil
 		}))
 
