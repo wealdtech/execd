@@ -124,6 +124,37 @@ type BlockFilter struct {
 	FeeRecipients *[][]byte
 }
 
+// BlockRewardFilter defines a filter for fetching block rewards.
+// Filter elements are ANDed together.
+// Results are always returned in ascending block height order.
+type BlockRewardFilter struct {
+	// Limit is the maximum number of block rewards to return.
+	// If 0 then there is no limit.
+	Limit uint32
+
+	// Order is either OrderEarliest, in which case the earliest results
+	// that match the filter are returned, or OrderLatest, in which case the
+	// latest results that match the filter are returned.
+	// The default is OrderEarliest.
+	Order Order
+
+	// From is the height of the earliest block reward to fetch.
+	// If nil then there is no earliest block.
+	From *uint32
+
+	// TimestampTo is the height of the latest block reward to fetch.
+	// If nil then there is no latest block.
+	To *uint32
+
+	// From is the timestamp of the earliest block reward to fetch.
+	// If nil then there is no earliest block.
+	TimestampFrom *time.Time
+
+	// TimestampTo is the timestamp of the latest block reward to fetch.
+	// If nil then there is no latest block.
+	TimestampTo *time.Time
+}
+
 // EventFilter defines a filter for fetching events.
 // Filter elements are ANDed together.
 // Results are always returned in ascending (block height, transaction index, event index) order.

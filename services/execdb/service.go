@@ -64,6 +64,12 @@ type BlocksSetter interface {
 	SetBlocks(ctx context.Context, blocks []*Block) error
 }
 
+// BlockRewardsProvider defines functions to provide block reward information.
+type BlockRewardsProvider interface {
+	// BlockRewards returns block rewards matching the supplied filter.
+	BlockRewards(ctx context.Context, filter *BlockRewardFilter) ([]*BlockReward, error)
+}
+
 // BlockRewardsSetter defines functions to create and update block rewards.
 type BlockRewardsSetter interface {
 	Service
