@@ -1,4 +1,4 @@
-// Copyright © 2021 Weald Technology Limited.
+// Copyright © 2021, 2024 Weald Technology Limited.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -15,6 +15,7 @@ package postgresql
 
 import (
 	"context"
+	"math/big"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/pkg/errors"
@@ -32,7 +33,27 @@ func (s *Service) SetTransactionStateDiffs(ctx context.Context, stateDiffs []*ex
 	// Flatten the balance changes.
 	balanceChanges := make([]*execdb.TransactionBalanceChange, 0)
 	for _, stateDiff := range stateDiffs {
-		balanceChanges = append(balanceChanges, stateDiff.BalanceChanges...)
+		for i := range stateDiff.BalanceChanges {
+			// Ensure this is a real balance change entry.
+			if stateDiff.BalanceChanges[i].Old == nil && stateDiff.BalanceChanges[i].New == nil {
+				continue
+			}
+
+			// Replace nil balances with 0 for our purposes.
+			if stateDiff.BalanceChanges[i].Old == nil {
+				stateDiff.BalanceChanges[i].Old = big.NewInt(0)
+			}
+			if stateDiff.BalanceChanges[i].New == nil {
+				stateDiff.BalanceChanges[i].New = big.NewInt(0)
+			}
+
+			if stateDiff.BalanceChanges[i].Old.Cmp(stateDiff.BalanceChanges[i].New) == 0 {
+				// The balance is unchanged.
+				continue
+			}
+
+			balanceChanges = append(balanceChanges, stateDiff.BalanceChanges[i])
+		}
 	}
 
 	// Create a savepoint in case the copy fails.
@@ -51,20 +72,12 @@ func (s *Service) SetTransactionStateDiffs(ctx context.Context, stateDiffs []*ex
 			"f_new",
 		},
 		pgx.CopyFromSlice(len(balanceChanges), func(i int) ([]interface{}, error) {
-			oldBalance := decimal.Zero
-			if balanceChanges[i].Old != nil {
-				oldBalance = decimal.NewFromBigInt(balanceChanges[i].Old, 0)
-			}
-			newBalance := decimal.Zero
-			if balanceChanges[i].New != nil {
-				newBalance = decimal.NewFromBigInt(balanceChanges[i].New, 0)
-			}
 			return []interface{}{
 				balanceChanges[i].TransactionHash,
 				balanceChanges[i].BlockHeight,
 				balanceChanges[i].Address,
-				oldBalance,
-				newBalance,
+				decimal.NewFromBigInt(balanceChanges[i].Old, 0),
+				decimal.NewFromBigInt(balanceChanges[i].New, 0),
 			}, nil
 		}))
 
