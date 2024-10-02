@@ -71,8 +71,8 @@ func (s *Service) SetTransactionStateDiffs(ctx context.Context, stateDiffs []*ex
 			"f_old",
 			"f_new",
 		},
-		pgx.CopyFromSlice(len(balanceChanges), func(i int) ([]interface{}, error) {
-			return []interface{}{
+		pgx.CopyFromSlice(len(balanceChanges), func(i int) ([]any, error) {
+			return []any{
 				balanceChanges[i].TransactionHash,
 				balanceChanges[i].BlockHeight,
 				balanceChanges[i].Address,
@@ -120,8 +120,8 @@ func (s *Service) SetTransactionStateDiffs(ctx context.Context, stateDiffs []*ex
 			"f_storage_address",
 			"f_value",
 		},
-		pgx.CopyFromSlice(len(storageChanges), func(i int) ([]interface{}, error) {
-			return []interface{}{
+		pgx.CopyFromSlice(len(storageChanges), func(i int) ([]any, error) {
+			return []any{
 				storageChanges[i].TransactionHash,
 				storageChanges[i].BlockHeight,
 				storageChanges[i].Address,

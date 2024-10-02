@@ -37,7 +37,7 @@ func (s *Service) BlockRewards(ctx context.Context, filter *execdb.BlockRewardFi
 
 	// Build the query.
 	queryBuilder := strings.Builder{}
-	queryVals := make([]interface{}, 0)
+	queryVals := make([]any, 0)
 
 	queryBuilder.WriteString(`
 SELECT f_block_height

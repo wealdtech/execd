@@ -37,7 +37,7 @@ func (s *Service) Events(ctx context.Context, filter *execdb.EventFilter) ([]*ex
 
 	// Build the query.
 	queryBuilder := strings.Builder{}
-	queryVals := make([]interface{}, 0)
+	queryVals := make([]any, 0)
 
 	queryBuilder.WriteString(`
 SELECT f_transaction_hash

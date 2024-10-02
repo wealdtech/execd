@@ -38,7 +38,7 @@ func (s *Service) Balances(ctx context.Context, filter *execdb.BalanceFilter) ([
 
 	// Build the query.
 	queryBuilder := strings.Builder{}
-	queryVals := make([]interface{}, 0)
+	queryVals := make([]any, 0)
 
 	queryBuilder.WriteString(`
 SELECT f_address

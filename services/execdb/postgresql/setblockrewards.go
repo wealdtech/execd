@@ -43,8 +43,8 @@ func (s *Service) SetBlockRewards(ctx context.Context, rewards []*execdb.BlockRe
 			"f_fees",
 			"f_payments",
 		},
-		pgx.CopyFromSlice(len(rewards), func(i int) ([]interface{}, error) {
-			return []interface{}{
+		pgx.CopyFromSlice(len(rewards), func(i int) ([]any, error) {
+			return []any{
 				rewards[i].BlockHash,
 				rewards[i].BlockHeight,
 				decimal.NewFromBigInt(rewards[i].Fees.ToBig(), 0),

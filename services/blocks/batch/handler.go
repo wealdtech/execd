@@ -79,7 +79,7 @@ func (s *Service) catchup(ctx context.Context, md *metadata) {
 			stateDiffs:   make([]*execdb.TransactionStateDiff, 0),
 		}
 
-		if _, err = util.Scatter(int(entries), int(s.processConcurrency), func(offset int, entries int, mu *sync.RWMutex) (interface{}, error) {
+		if _, err = util.Scatter(int(entries), int(s.processConcurrency), func(offset int, entries int, mu *sync.RWMutex) (any, error) {
 			for i := offset; i < offset+entries; i++ {
 				log.Trace().Uint32("height", blockHeights[i]).Msg("Fetching block")
 				block, err := s.blocksProvider.Block(ctx, fmt.Sprintf("%d", blockHeights[i]))

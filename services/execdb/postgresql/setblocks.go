@@ -57,7 +57,7 @@ func (s *Service) SetBlocks(ctx context.Context, blocks []*execdb.Block) error {
 			"f_blob_gas_used",
 			"f_excess_blob_gas",
 		},
-		pgx.CopyFromSlice(len(blocks), func(i int) ([]interface{}, error) {
+		pgx.CopyFromSlice(len(blocks), func(i int) ([]any, error) {
 			var issuance *decimal.Decimal
 			if blocks[i].Issuance != nil {
 				tmp := decimal.NewFromBigInt(blocks[i].Issuance, 0)
@@ -71,7 +71,7 @@ func (s *Service) SetBlocks(ctx context.Context, blocks []*execdb.Block) error {
 			if len(blocks[i].ParentBeaconBlockRoot) > 0 {
 				parentBeaconBlockRoot = blocks[i].ParentBeaconBlockRoot
 			}
-			return []interface{}{
+			return []any{
 				blocks[i].Height,
 				blocks[i].Hash,
 				blocks[i].BaseFee,

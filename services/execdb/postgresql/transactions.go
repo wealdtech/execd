@@ -39,7 +39,7 @@ func (s *Service) Transactions(ctx context.Context, filter *execdb.TransactionFi
 
 	// Build the query.
 	queryBuilder := strings.Builder{}
-	queryVals := make([]interface{}, 0)
+	queryVals := make([]any, 0)
 
 	queryBuilder.WriteString(`
 SELECT f_block_height

@@ -44,8 +44,8 @@ func (s *Service) SetEvents(ctx context.Context, events []*execdb.Event) error {
 			"f_topics",
 			"f_data",
 		},
-		pgx.CopyFromSlice(len(events), func(i int) ([]interface{}, error) {
-			return []interface{}{
+		pgx.CopyFromSlice(len(events), func(i int) ([]any, error) {
+			return []any{
 				events[i].TransactionHash,
 				events[i].BlockHeight,
 				events[i].Index,

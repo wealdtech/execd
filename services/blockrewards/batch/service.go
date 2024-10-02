@@ -87,7 +87,7 @@ func (s *Service) updateOnRestart(ctx context.Context, startHeight int64) {
 	s.catchup(ctx, md)
 	log.Info().Int64("height", md.LatestHeight).Msg("Caught up; starting periodic update")
 
-	runtimeFunc := func(_ context.Context, _ interface{}) (time.Time, error) {
+	runtimeFunc := func(_ context.Context, _ any) (time.Time, error) {
 		return time.Now().Add(s.interval), nil
 	}
 
@@ -103,7 +103,7 @@ func (s *Service) updateOnRestart(ctx context.Context, startHeight int64) {
 	}
 }
 
-func (s *Service) updateOnScheduleTick(ctx context.Context, _ interface{}) {
+func (s *Service) updateOnScheduleTick(ctx context.Context, _ any) {
 	// Only allow 1 handler to be active.
 	acquired := s.activitySem.TryAcquire(1)
 	if !acquired {

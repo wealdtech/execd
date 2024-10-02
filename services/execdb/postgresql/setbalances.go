@@ -42,8 +42,8 @@ func (s *Service) SetBalances(ctx context.Context, balances []*execdb.Balance) e
 			"f_from",
 			"f_amount",
 		},
-		pgx.CopyFromSlice(len(balances), func(i int) ([]interface{}, error) {
-			return []interface{}{
+		pgx.CopyFromSlice(len(balances), func(i int) ([]any, error) {
+			return []any{
 				balances[i].Address[:],
 				balances[i].Currency,
 				balances[i].From,
