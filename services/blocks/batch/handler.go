@@ -68,7 +68,7 @@ func (s *Service) catchup(ctx context.Context, md *metadata) {
 		}
 
 		blockHeights := make([]uint32, entries)
-		for i := uint32(0); i < entries; i++ {
+		for i := range entries {
 			blockHeights[i] = height + i
 		}
 
@@ -87,7 +87,7 @@ func (s *Service) catchup(ctx context.Context, md *metadata) {
 					log.Debug().Uint32("height", blockHeights[i]).Msg("Failed to obtain block")
 					return nil, errors.Wrap(err, "failed to obtain block")
 				}
-				if err := s.handleBlock(ctx, md, mu, bd, i, block); err != nil {
+				if err := s.handleBlock(ctx, mu, bd, i, block); err != nil {
 					log.Debug().Uint32("height", blockHeights[i]).Msg("Failed to handle block")
 					if strings.Contains(err.Error(), "failed to replay block") {
 						// Erigon can generate this error due to internal problems with its database.  Nothing we can do about it,
@@ -138,7 +138,6 @@ func (s *Service) catchup(ctx context.Context, md *metadata) {
 }
 
 func (s *Service) handleBlock(ctx context.Context,
-	md *metadata,
 	mu *sync.RWMutex,
 	bd *batchData,
 	blockOffset int,
@@ -274,7 +273,7 @@ func (s *Service) fetchBlockTransactions(ctx context.Context,
 	return dbTransactions, dbEvents, dbStateDiffs, nil
 }
 
-func (s *Service) compileTransaction(ctx context.Context,
+func (s *Service) compileTransaction(_ context.Context,
 	block *spec.Block,
 	tx *spec.Transaction,
 	index int,

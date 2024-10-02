@@ -23,7 +23,7 @@ import (
 	"github.com/wealdtech/execd/services/execdb"
 )
 
-// SetTransactions sets multiple transactions efficiently
+// SetTransactions sets multiple transactions efficiently.
 func (s *Service) SetTransactions(ctx context.Context, transactions []*execdb.Transaction) error {
 	tx := s.tx(ctx)
 	if tx == nil {

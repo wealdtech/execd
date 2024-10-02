@@ -91,7 +91,7 @@ func New(ctx context.Context, params ...Parameter) (*Service, error) {
 	config.ConnConfig.TLSConfig = tlsConfig
 	config.ConnConfig.Tracer = &tracelog.TraceLog{Logger: zerologadapter.NewLogger(log)}
 
-	pool, err = pgxpool.NewWithConfig(context.Background(), config)
+	pool, err = pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to connect to database")
 	}
@@ -109,7 +109,7 @@ func New(ctx context.Context, params ...Parameter) (*Service, error) {
 	return s, nil
 }
 
-func registerCustomTypes(ctx context.Context, conn *pgx.Conn) error {
+func registerCustomTypes(_ context.Context, conn *pgx.Conn) error {
 	pgxdecimal.Register(conn.TypeMap())
 
 	return nil

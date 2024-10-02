@@ -51,20 +51,20 @@ WHERE f_transaction_hash = $1`,
 	stateDiff := &execdb.TransactionStateDiff{}
 	for rows.Next() {
 		balanceChange := &execdb.TransactionBalanceChange{}
-		var old decimal.Decimal
-		var new decimal.Decimal
+		var oldBalance decimal.Decimal
+		var newBalance decimal.Decimal
 		err := rows.Scan(
 			&balanceChange.TransactionHash,
 			&balanceChange.BlockHeight,
 			&balanceChange.Address,
-			&old,
-			&new,
+			&oldBalance,
+			&newBalance,
 		)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to scan row")
 		}
-		balanceChange.Old = old.BigInt()
-		balanceChange.New = new.BigInt()
+		balanceChange.Old = oldBalance.BigInt()
+		balanceChange.New = newBalance.BigInt()
 		stateDiff.BalanceChanges = append(stateDiff.BalanceChanges, balanceChange)
 	}
 

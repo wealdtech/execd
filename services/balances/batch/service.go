@@ -92,11 +92,14 @@ func (s *Service) updateOnRestart(ctx context.Context, startHeight int64) {
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to obtain metadata before catchup")
 	}
-	// if startHeight >= 0 {
-	// 	// Explicit requirement to start at a given height.
-	// 	// Subtract one to state that the block higher than the required start is the last processed.
-	// 	md.LatestHeight = startHeight - 1
-	// }
+
+	if startHeight >= 0 {
+		// Explicit requirement to start at a given height.
+		// Subtract one to state that the block higher than the required start is the last processed.
+		for k := range md.LatestHeights {
+			md.LatestHeights[k] = startHeight - 1
+		}
+	}
 
 	// Populate the balance cache.
 	if err := s.populateBalanceCache(ctx, md.LatestHeights); err != nil {
@@ -106,7 +109,7 @@ func (s *Service) updateOnRestart(ctx context.Context, startHeight int64) {
 	s.catchup(ctx, md)
 	log.Info().Msg("Caught up")
 
-	runtimeFunc := func(ctx context.Context, data interface{}) (time.Time, error) {
+	runtimeFunc := func(_ context.Context, _ interface{}) (time.Time, error) {
 		return time.Now().Add(s.interval), nil
 	}
 
@@ -122,7 +125,7 @@ func (s *Service) updateOnRestart(ctx context.Context, startHeight int64) {
 	}
 }
 
-func (s *Service) updateOnScheduleTick(ctx context.Context, data interface{}) {
+func (s *Service) updateOnScheduleTick(ctx context.Context, _ interface{}) {
 	// Only allow 1 handler to be active.
 	acquired := s.activitySem.TryAcquire(1)
 	if !acquired {

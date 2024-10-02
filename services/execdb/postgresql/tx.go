@@ -54,7 +54,7 @@ func (s *Service) hasTx(ctx context.Context) bool {
 	return ok
 }
 
-// tx returns the transaction; nil if no transaction
+// tx returns the transaction; nil if no transaction.
 func (s *Service) tx(ctx context.Context) pgx.Tx {
 	if ctx == nil {
 		return nil

@@ -24,8 +24,10 @@ import (
 	"github.com/wealdtech/execd/util"
 )
 
-var clients map[string]execclient.Service
-var clientsMu sync.Mutex
+var (
+	clients   map[string]execclient.Service
+	clientsMu sync.Mutex
+)
 
 // fetchClient fetches a client service, instantiating it if required.
 func fetchClient(ctx context.Context, address string) (execclient.Service, error) {
@@ -56,7 +58,7 @@ func fetchClient(ctx context.Context, address string) (execclient.Service, error
 	return client, nil
 }
 
-func confirmClientInterfaces(ctx context.Context, client execclient.Service) error {
+func confirmClientInterfaces(_ context.Context, client execclient.Service) error {
 	if _, isProvider := client.(execclient.BlocksProvider); !isProvider {
 		return errors.New("client is not a BlocksProvider")
 	}

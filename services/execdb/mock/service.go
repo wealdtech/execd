@@ -23,76 +23,76 @@ import (
 type Service struct{}
 
 // BeginTx is a mock.
-func (s *Service) BeginTx(ctx context.Context) (context.Context, context.CancelFunc, error) {
+func (*Service) BeginTx(_ context.Context) (context.Context, context.CancelFunc, error) {
 	return nil, nil, nil
 }
 
 // CommitTx is a mock.
-func (s *Service) CommitTx(ctx context.Context) error {
+func (*Service) CommitTx(_ context.Context) error {
 	return nil
 }
 
 // SetMetadata sets a metadata key to a JSON value.
-func (s *Service) SetMetadata(ctx context.Context, key string, value []byte) error {
+func (*Service) SetMetadata(_ context.Context, _ string, _ []byte) error {
 	return nil
 }
 
 // Metadata obtains the JSON value from a metadata key.
-func (s *Service) Metadata(ctx context.Context, key string) ([]byte, error) {
+func (*Service) Metadata(_ context.Context, _ string) ([]byte, error) {
 	return nil, nil
 }
 
 // SetBlock is a mock.
-func (s *Service) SetBlock(ctx context.Context, block *execdb.Block) error {
+func (*Service) SetBlock(_ context.Context, _ *execdb.Block) error {
 	return nil
 }
 
 // SetBlocks sets multiple blocks efficiently.
-func (s *Service) SetBlocks(ctx context.Context, blocks []*execdb.Block) error {
+func (*Service) SetBlocks(_ context.Context, _ []*execdb.Block) error {
 	return nil
 }
 
 // Events is a mock.
-func (s *Service) Events(ctx context.Context, filter *execdb.EventFilter) ([]*execdb.Event, error) {
+func (*Service) Events(_ context.Context, _ *execdb.EventFilter) ([]*execdb.Event, error) {
 	return nil, nil
 }
 
 // SetEvent is a mock.
-func (s *Service) SetEvent(ctx context.Context, event *execdb.Event) error {
+func (*Service) SetEvent(_ context.Context, _ *execdb.Event) error {
 	return nil
 }
 
 // SetEvents sets is a mock.
-func (s *Service) SetEvents(ctx context.Context, events []*execdb.Event) error {
+func (*Service) SetEvents(_ context.Context, _ []*execdb.Event) error {
 	return nil
 }
 
 // Transactions is a mock.
-func (s *Service) Transactions(ctx context.Context, filter *execdb.TransactionFilter) ([]*execdb.Transaction, error) {
+func (*Service) Transactions(_ context.Context, _ *execdb.TransactionFilter) ([]*execdb.Transaction, error) {
 	return nil, nil
 }
 
 // Transaction is a mock.
-func (s *Service) Transaction(ctx context.Context, hash []byte) (*execdb.Transaction, error) {
+func (*Service) Transaction(_ context.Context, _ []byte) (*execdb.Transaction, error) {
 	return nil, nil
 }
 
 // SetTransaction is a mock.
-func (s *Service) SetTransaction(ctx context.Context, transaction *execdb.Transaction) error {
+func (*Service) SetTransaction(_ context.Context, _ *execdb.Transaction) error {
 	return nil
 }
 
 // SetTransactions is a mock.
-func (s *Service) SetTransactions(ctx context.Context, transactions []*execdb.Transaction) error {
+func (*Service) SetTransactions(_ context.Context, _ []*execdb.Transaction) error {
 	return nil
 }
 
 // SetTransactionStateDiff is a mock.
-func (s *Service) SetTransactionStateDiff(ctx context.Context, stateDiff *execdb.TransactionStateDiff) error {
+func (*Service) SetTransactionStateDiff(_ context.Context, _ *execdb.TransactionStateDiff) error {
 	return nil
 }
 
 // SetTransactionStateDiffs is a mock.
-func (s *Service) SetTransactionStateDiffs(ctx context.Context, stateDiffs []*execdb.TransactionStateDiff) error {
+func (*Service) SetTransactionStateDiffs(_ context.Context, _ []*execdb.TransactionStateDiff) error {
 	return nil
 }

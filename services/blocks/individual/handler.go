@@ -102,7 +102,7 @@ func (s *Service) handleBlock(ctx context.Context,
 		return errors.Wrap(err, "failed to set block")
 	}
 
-	if err := s.handleBlockTransactions(ctx, md, block); err != nil {
+	if err := s.handleBlockTransactions(ctx, block); err != nil {
 		cancel()
 		return errors.Wrap(err, "failed to set block transactions")
 	}
@@ -123,7 +123,6 @@ func (s *Service) handleBlock(ctx context.Context,
 }
 
 func (s *Service) handleBlockTransactions(ctx context.Context,
-	md *metadata,
 	block *spec.Block,
 ) error {
 	dbTransactions := make([]*execdb.Transaction, 0, len(block.Transactions()))
@@ -203,7 +202,7 @@ func (s *Service) handleBlockTransactions(ctx context.Context,
 	return nil
 }
 
-func (s *Service) compileTransaction(ctx context.Context,
+func (s *Service) compileTransaction(_ context.Context,
 	block *spec.Block,
 	tx *spec.Transaction,
 	index int,
@@ -271,7 +270,9 @@ func (s *Service) addTransactionReceiptInfo(ctx context.Context,
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to obtain transaction receipt")
 	}
-	// TODO cancun receipt info.
+
+	// Cancun info blob gas price and blob gas used not currently obtained/stored.
+
 	if receipt.GasUsed() > 0 {
 		dbTransaction.GasUsed = receipt.GasUsed()
 		dbTransaction.Status = receipt.Status()

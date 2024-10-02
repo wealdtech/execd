@@ -55,7 +55,7 @@ import (
 )
 
 // ReleaseVersion is the release version for the code.
-var ReleaseVersion = "0.5.2"
+var ReleaseVersion = "0.5.3"
 
 func main() {
 	os.Exit(main2())
@@ -119,7 +119,7 @@ func main2() int {
 	log.Info().Msg("All services operational")
 
 	// Handle configuration change.
-	viper.OnConfigChange(func(e fsnotify.Event) {
+	viper.OnConfigChange(func(_ fsnotify.Event) {
 		log.Debug().Msg("Configuration change detected")
 		addresses := make([]types.Address, len(viper.GetStringSlice("balances.addresses")))
 		for i, str := range viper.GetStringSlice("balances.addresses") {
@@ -204,8 +204,20 @@ func fetchConfig() error {
 	viper.SetDefault("process-concurrency", int64(runtime.GOMAXPROCS(-1)))
 
 	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return errors.Wrap(err, "failed to read configuration file")
+		switch {
+		case errors.As(err, &viper.ConfigFileNotFoundError{}):
+			// It is allowable for execd to not have a configuration file, but only if
+			// we have the information from elsewhere (e.g. environment variables).  Check
+			// to see if we have any execution nodes configured, as if not we aren't going to
+			// get very far anyway.
+			if viper.Get("executionclient.addrees") == nil {
+				// Assume the underlying issue is that the configuration file is missing.
+				return errors.Wrap(err, "could not find the configuration file")
+			}
+		case errors.As(err, &viper.ConfigParseError{}):
+			return errors.Wrap(err, "could not parse the configuration file")
+		default:
+			return errors.Wrap(err, "failed to obtain configuration")
 		}
 	}
 
@@ -619,9 +631,9 @@ func startBlockRewards(
 	return s, nil
 }
 
-func runCommands(ctx context.Context) {
+func runCommands(_ context.Context) {
 	if viper.GetBool("version") {
-		fmt.Printf("%s\n", ReleaseVersion)
+		fmt.Fprintf(os.Stdout, "%s\n", ReleaseVersion)
 		os.Exit(0)
 	}
 }

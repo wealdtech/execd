@@ -100,7 +100,7 @@ LIMIT $%d`, len(queryVals)))
 		for i := range queryVals {
 			params[i] = fmt.Sprintf("%v", queryVals[i])
 		}
-		log.Trace().Str("query", strings.ReplaceAll(queryBuilder.String(), "\n", " ")).Strs("params", params).Msg("SQL query")
+		e.Str("query", strings.ReplaceAll(queryBuilder.String(), "\n", " ")).Strs("params", params).Msg("SQL query")
 	}
 
 	rows, err := tx.Query(ctx,

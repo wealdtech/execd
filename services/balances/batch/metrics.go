@@ -23,8 +23,10 @@ import (
 
 var metricsNamespace = "execd"
 
-var latestBlock prometheus.Gauge
-var blocksProcessed prometheus.Gauge
+var (
+	latestBlock     prometheus.Gauge
+	blocksProcessed prometheus.Gauge
+)
 
 func registerMetrics(ctx context.Context, monitor metrics.Service) error {
 	if latestBlock != nil {
@@ -41,7 +43,7 @@ func registerMetrics(ctx context.Context, monitor metrics.Service) error {
 	return nil
 }
 
-func registerPrometheusMetrics(ctx context.Context) error {
+func registerPrometheusMetrics(_ context.Context) error {
 	latestBlock = prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace: metricsNamespace,
 		Subsystem: "balances",
