@@ -184,6 +184,10 @@ type EventFilter struct {
 	// Address is the address of the contract that generated the event.
 	// If nil then no filter is applied
 	Address *[]byte
+
+	// Topics are the topics of the event.
+	// If nil then no filter is applied.
+	Topics [][]byte
 }
 
 // TransactionBalanceChangeFilter defines a filter for fetching transaction balance changes.

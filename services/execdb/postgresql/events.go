@@ -75,6 +75,15 @@ FROM t_events`)
 		queryVals = append(queryVals, *filter.To)
 		queryBuilder.WriteString(fmt.Sprintf(`
 %s f_block_height <= $%d`, wherestr, len(queryVals)))
+		wherestr = "  AND"
+	}
+
+	if len(filter.Topics) > 0 {
+		queryVals = append(queryVals, filter.Topics)
+		queryBuilder.WriteString(fmt.Sprintf(`
+%s f_topics && $%d IS TRUE`, wherestr, len(queryVals)))
+		//nolint
+		wherestr = "  AND"
 	}
 
 	switch filter.Order {
