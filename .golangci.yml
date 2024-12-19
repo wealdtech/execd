@@ -146,7 +146,6 @@ linters:
     - depguard
     - dupl
     - err113
-    - execinquery
     - exhaustive
     - exhaustruct
     - exportloopref
@@ -156,7 +155,6 @@ linters:
     - gochecknoglobals
     - gocognit
     - goconst
-    - gomnd
     - ireturn
     - inamedparam
     - lll
