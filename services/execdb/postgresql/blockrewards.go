@@ -81,10 +81,10 @@ LEFT JOIN t_blocks ON t_blocks.f_hash = t_block_rewards.f_block_hash`)
 	switch filter.Order {
 	case execdb.OrderEarliest:
 		queryBuilder.WriteString(`
-ORDER BY f_height`)
+ORDER BY f_block_height`)
 	case execdb.OrderLatest:
 		queryBuilder.WriteString(`
-ORDER BY f_height DESC`)
+ORDER BY f_block_height DESC`)
 	default:
 		return nil, errors.New("no order specified")
 	}
