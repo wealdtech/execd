@@ -1,4 +1,4 @@
-// Copyright © 2021 - 2023 Weald Technology Trading.
+// Copyright © 2021 - 2025 Weald Technology Trading.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -25,7 +25,7 @@ type schemaMetadata struct {
 	Version uint64 `json:"version"`
 }
 
-var currentVersion = uint64(9)
+var currentVersion = uint64(10)
 
 type upgrade struct {
 	funcs []func(context.Context, *Service) error
@@ -72,6 +72,11 @@ var upgrades = map[uint64]*upgrade{
 		funcs: []func(context.Context, *Service) error{
 			addCancunBlockFields,
 			addCancunTransactionFields,
+		},
+	},
+	10: {
+		funcs: []func(context.Context, *Service) error{
+			totalDifficultyOptional,
 		},
 	},
 }
@@ -834,6 +839,23 @@ ALTER TABLE t_transactions
 ADD COLUMN f_blob_gas_used BIGINT
 `); err != nil {
 		return errors.Wrap(err, "failed to add f_blob_gas_used to t_transactions")
+	}
+
+	return nil
+}
+
+// totalDifficultyOptional sets the f_total_difficulty field to be nullable in t_blocks.
+func totalDifficultyOptional(ctx context.Context, s *Service) error {
+	tx := s.tx(ctx)
+	if tx == nil {
+		return ErrNoTransaction
+	}
+
+	if _, err := tx.Exec(ctx, `
+ALTER TABLE t_blocks
+ALTER COLUMN f_total_difficulty
+DROP NOT NULL`); err != nil {
+		return errors.Wrap(err, "failed to make f_total_difficulty nullable in t_blocks")
 	}
 
 	return nil

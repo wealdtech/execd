@@ -71,6 +71,11 @@ func (s *Service) SetBlocks(ctx context.Context, blocks []*execdb.Block) error {
 			if len(blocks[i].ParentBeaconBlockRoot) > 0 {
 				parentBeaconBlockRoot = blocks[i].ParentBeaconBlockRoot
 			}
+			var totalDifficulty *decimal.Decimal
+			if blocks[i].TotalDifficulty != nil {
+				tmp := decimal.NewFromBigInt(blocks[i].TotalDifficulty, 0)
+				totalDifficulty = &tmp
+			}
 			return []any{
 				blocks[i].Height,
 				blocks[i].Hash,
@@ -84,7 +89,7 @@ func (s *Service) SetBlocks(ctx context.Context, blocks []*execdb.Block) error {
 				blocks[i].Size,
 				blocks[i].StateRoot,
 				blocks[i].Timestamp,
-				decimal.NewFromBigInt(blocks[i].TotalDifficulty, 0),
+				totalDifficulty,
 				issuance,
 				withdrawalsRoot,
 				parentBeaconBlockRoot,

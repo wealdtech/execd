@@ -127,7 +127,7 @@ LIMIT $%d`, len(queryVals)))
 	defer rows.Close()
 
 	blocks := make([]*execdb.Block, 0)
-	var totalDifficulty decimal.Decimal
+	var totalDifficulty decimal.NullDecimal
 	var issuance decimal.NullDecimal
 	var blobGasUsed sql.NullInt64
 	var excessBlobGas sql.NullInt64
@@ -154,7 +154,9 @@ LIMIT $%d`, len(queryVals)))
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to scan row")
 		}
-		block.TotalDifficulty = totalDifficulty.BigInt()
+		if totalDifficulty.Valid {
+			block.TotalDifficulty = totalDifficulty.Decimal.BigInt()
+		}
 		if issuance.Valid {
 			block.Issuance = issuance.Decimal.BigInt()
 		}
