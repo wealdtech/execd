@@ -1,4 +1,4 @@
-// Copyright © 2021 Weald Technology Trading.
+// Copyright © 2021 - 2025 Weald Technology Trading.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -58,6 +58,7 @@ SELECT f_height
       ,f_issuance
       ,f_blob_gas_used
       ,f_excess_blob_gas
+      ,f_requests_hash
 FROM t_blocks`)
 
 	conditions := make([]string, 0)
@@ -150,6 +151,7 @@ LIMIT $%d`, len(queryVals)))
 			&issuance,
 			&blobGasUsed,
 			&excessBlobGas,
+			&block.RequestsHash,
 		)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to scan row")

@@ -1,4 +1,4 @@
-// Copyright © 2021, 2024 Weald Technology Trading.
+// Copyright © 2021 - 2025 Weald Technology Trading.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -37,6 +37,23 @@ func (s *Service) SetBlock(ctx context.Context, block *execdb.Block) error {
 		tmp := decimal.NewFromBigInt(block.Issuance, 0)
 		issuance = &tmp
 	}
+	var withdrawalsRoot []byte
+	if len(block.WithdrawalsRoot) > 0 {
+		withdrawalsRoot = block.WithdrawalsRoot
+	}
+	var parentBeaconBlockRoot []byte
+	if len(block.ParentBeaconBlockRoot) > 0 {
+		parentBeaconBlockRoot = block.ParentBeaconBlockRoot
+	}
+	var totalDifficulty *decimal.Decimal
+	if block.TotalDifficulty != nil {
+		tmp := decimal.NewFromBigInt(block.TotalDifficulty, 0)
+		totalDifficulty = &tmp
+	}
+	var requestsHash []byte
+	if len(block.RequestsHash) > 0 {
+		requestsHash = block.RequestsHash
+	}
 	_, err := tx.Exec(ctx, `
 INSERT INTO t_blocks(f_height
                     ,f_hash
@@ -52,10 +69,13 @@ INSERT INTO t_blocks(f_height
                     ,f_timestamp
                     ,f_total_difficulty
                     ,f_issuance
+                    ,f_withdrawals_root
+                    ,f_parent_beacon_block_root
                     ,f_blob_gas_used
                     ,f_excess_blob_gas
+                    ,f_requests_hash
                     )
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
 ON CONFLICT (f_hash) DO
 UPDATE
 SET f_height = excluded.f_height
@@ -70,8 +90,12 @@ SET f_height = excluded.f_height
    ,f_state_root = excluded.f_state_root
    ,f_timestamp = excluded.f_timestamp
    ,f_total_difficulty = excluded.f_total_difficulty
+   ,f_issuance = excluded.f_issuance
+   ,f_withdrawals_root = excluded.f_withdrawals_root
+   ,f_parent_beacon_block_root = excluded.f_parent_beacon_block_root
    ,f_blob_gas_used = excluded.f_blob_gas_used
    ,f_excess_blob_gas = excluded.f_excess_blob_gas
+   ,f_requests_hash = excluded.f_requests_hash
 `,
 		block.Height,
 		block.Hash,
@@ -85,10 +109,13 @@ SET f_height = excluded.f_height
 		block.Size,
 		block.StateRoot,
 		block.Timestamp,
-		decimal.NewFromBigInt(block.TotalDifficulty, 0),
+		totalDifficulty,
 		issuance,
+		withdrawalsRoot,
+		parentBeaconBlockRoot,
 		block.BlobGasUsed,
 		block.ExcessBlobGas,
+		requestsHash,
 	)
 
 	return err

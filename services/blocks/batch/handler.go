@@ -1,4 +1,4 @@
-// Copyright © 2021 - 2023 Weald Technology Trading.
+// Copyright © 2021 - 2025 Weald Technology Trading.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -147,10 +147,6 @@ func (s *Service) handleBlock(ctx context.Context,
 	feeRecipient := block.FeeRecipient()
 	parentHash := block.ParentHash()
 	stateRoot := block.StateRoot()
-	parentBeaconBlockRoot, parentBeaconBlockRootExists := block.ParentBeaconBlockRoot()
-	withdrawalsRoot, withdrawalsRootExists := block.WithdrawalsRoot()
-	blobGasUsed, blobGasUsedExists := block.BlobGasUsed()
-	excessBlobGas, excessBlobGasExists := block.ExcessBlobGas()
 	dbBlock := &execdb.Block{
 		Height:          block.Number(),
 		Hash:            hash[:],
@@ -167,18 +163,31 @@ func (s *Service) handleBlock(ctx context.Context,
 		TotalDifficulty: block.TotalDifficulty(),
 	}
 
+	parentBeaconBlockRoot, parentBeaconBlockRootExists := block.ParentBeaconBlockRoot()
 	if parentBeaconBlockRootExists {
 		dbBlock.ParentBeaconBlockRoot = parentBeaconBlockRoot[:]
 	}
+
+	withdrawalsRoot, withdrawalsRootExists := block.WithdrawalsRoot()
 	if withdrawalsRootExists {
 		dbBlock.WithdrawalsRoot = withdrawalsRoot[:]
 	}
+
+	blobGasUsed, blobGasUsedExists := block.BlobGasUsed()
 	if blobGasUsedExists {
 		dbBlock.BlobGasUsed = &blobGasUsed
 	}
+
+	excessBlobGas, excessBlobGasExists := block.ExcessBlobGas()
 	if excessBlobGasExists {
 		dbBlock.ExcessBlobGas = &excessBlobGas
 	}
+
+	requestsHash, requestsHashExists := block.RequestsHash()
+	if requestsHashExists {
+		dbBlock.RequestsHash = requestsHash[:]
+	}
+
 	if s.issuanceProvider != nil {
 		issuance, err := s.issuanceProvider.Issuance(ctx, fmt.Sprintf("%d", block.Number()))
 		if err != nil {
@@ -308,13 +317,13 @@ func (s *Service) compileTransaction(_ context.Context,
 		V:     tx.V(),
 		Value: tx.Value(),
 	}
-	if tx.Type == 1 || tx.Type == 2 || tx.Type == 3 {
+	if tx.Type >= 1 {
 		dbTransaction.AccessList = make(map[string][][]byte)
 		for _, entry := range tx.AccessList() {
 			dbTransaction.AccessList[fmt.Sprintf("%x", entry.Address)] = entry.StorageKeys
 		}
 	}
-	if tx.Type == 2 || tx.Type == 3 {
+	if tx.Type >= 2 {
 		maxFeePerGas := tx.MaxFeePerGas()
 		dbTransaction.MaxFeePerGas = &maxFeePerGas
 		maxPriorityFeePerGas := tx.MaxPriorityFeePerGas()
@@ -333,20 +342,30 @@ func (s *Service) compileTransaction(_ context.Context,
 			blobVersionedHashes[i] = blobVersionedHash[:]
 		}
 		dbTransaction.BlobVersionedHashes = &blobVersionedHashes
-		maxFeePerGas := tx.MaxFeePerGas()
-		dbTransaction.MaxFeePerGas = &maxFeePerGas
-		maxPriorityFeePerGas := tx.MaxPriorityFeePerGas()
-		dbTransaction.MaxPriorityFeePerGas = &maxPriorityFeePerGas
-		// Calculate the gas price.
-		priorityFeePerGas := maxFeePerGas - block.BaseFeePerGas()
-		if priorityFeePerGas > maxPriorityFeePerGas {
-			priorityFeePerGas = maxPriorityFeePerGas
-		}
-		dbTransaction.GasPrice = block.BaseFeePerGas() + priorityFeePerGas
-
 		maxFeePerBlobGas := tx.MaxFeePerBlobGas()
 		dbTransaction.MaxFeePerBlobGas = &maxFeePerBlobGas
 		dbTransaction.BlobGasUsed = tx.BlobGasUsed()
+	}
+	if tx.Type == 4 {
+		dbTransaction.AuthorizationList = make([]*execdb.TransactionAuthorizationListEntry, len(tx.AuthorizationList()))
+		for i, entry := range tx.AuthorizationList() {
+			chainID := []byte{0x00}
+			if entry.ChainID.Sign() > 0 {
+				chainID = entry.ChainID.Bytes()
+			}
+			yParity := entry.YParity.Sign() > 0
+			dbTransaction.AuthorizationList[i] = &execdb.TransactionAuthorizationListEntry{
+				TransactionHash: dbTransaction.Hash,
+				BlockHeight:     dbTransaction.BlockHeight,
+				Index:           uint32(i),
+				ChainID:         chainID,
+				Address:         entry.Address[:],
+				Nonce:           entry.Nonce,
+				R:               entry.R,
+				S:               entry.S,
+				YParity:         yParity,
+			}
+		}
 	}
 
 	return dbTransaction
@@ -366,6 +385,9 @@ func (s *Service) addTransactionReceiptInfo(ctx context.Context,
 	if receipt.GasUsed() > 0 {
 		dbTransaction.GasUsed = receipt.GasUsed()
 		dbTransaction.Status = receipt.Status()
+	}
+	if receipt.EffectiveGasPrice() > 0 {
+		dbTransaction.GasPrice = receipt.EffectiveGasPrice()
 	}
 	if receipt.ContractAddress() != nil {
 		tmp := *receipt.ContractAddress()

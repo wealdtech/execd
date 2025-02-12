@@ -25,7 +25,7 @@ type schemaMetadata struct {
 	Version uint64 `json:"version"`
 }
 
-var currentVersion = uint64(10)
+var currentVersion = uint64(11)
 
 type upgrade struct {
 	funcs []func(context.Context, *Service) error
@@ -77,6 +77,12 @@ var upgrades = map[uint64]*upgrade{
 	10: {
 		funcs: []func(context.Context, *Service) error{
 			totalDifficultyOptional,
+		},
+	},
+	11: {
+		funcs: []func(context.Context, *Service) error{
+			addRequestsHash,
+			addTransactionAuthorizationLists,
 		},
 	},
 }
@@ -262,7 +268,6 @@ CREATE TABLE t_metadata (
  ,f_value JSONB NOT NULL
 );
 CREATE UNIQUE INDEX i_metadata_1 ON t_metadata(f_key);
-INSERT INTO t_metadata VALUES('schema', '{"version": 9}');
 
 -- t_blocks contains execution layer blocks.
 CREATE TABLE t_blocks (
@@ -282,8 +287,9 @@ CREATE TABLE t_blocks (
  ,f_state_root               BYTEA NOT NULL
  ,f_withdrawals_root         BYTEA
  ,f_timestamp                TIMESTAMPTZ NOT NULL
- ,f_total_difficulty         NUMERIC NOT NULL
+ ,f_total_difficulty         NUMERIC
  ,f_issuance                 NUMERIC
+ ,f_requests_hash            BYTEA
 );
 CREATE UNIQUE INDEX i_blocks_1 ON t_blocks(f_height,f_hash);
 CREATE UNIQUE INDEX i_blocks_2 ON t_blocks(f_hash);
@@ -333,6 +339,21 @@ CREATE TABLE t_transaction_access_lists (
 CREATE UNIQUE INDEX i_transaction_access_lists_1 ON t_transaction_access_lists(f_transaction_hash,f_block_height,f_address);
 CREATE INDEX i_transaction_access_lists_2 ON t_transaction_access_lists(f_address);
 CREATE INDEX i_transaction_access_lists_3 ON t_transaction_access_lists(f_block_height);
+
+CREATE TABLE t_transaction_authorization_lists (
+  f_transaction_hash BYTEA NOT NULL REFERENCES t_transactions(f_hash) ON DELETE CASCADE
+ ,f_block_height     INTEGER NOT NULL
+ ,f_index            INTEGER NOT NULL
+ ,f_chain_id         BYTEA NOT NULL
+ ,f_address          BYTEA NOT NULL
+ ,f_nonce            BIGINT NOT NULL
+ ,f_r                BYTEA NOT NULL
+ ,f_s                BYTEA NOT NULL
+ ,f_y_parity         BOOLEAN NOT NULL
+);
+CREATE UNIQUE INDEX i_transaction_authorization_lists_1 ON t_transaction_authorization_lists(f_transaction_hash,f_block_height,f_index);
+CREATE INDEX i_transaction_authorization_lists_2 ON t_transaction_authorization_lists(f_address);
+CREATE INDEX i_transaction_authorization_lists_3 ON t_transaction_authorization_lists(f_block_height);
 
 -- t_transaction_balance_changes contains balance changes as a result of a transaction.
 CREATE TABLE t_transaction_balance_changes (
@@ -393,6 +414,11 @@ CREATE UNIQUE INDEX i_balances_1 ON t_balances(f_address,f_currency,f_from);
 `); err != nil {
 		cancel()
 		return errors.Wrap(err, "failed to create initial tables")
+	}
+
+	if err := s.setVersion(ctx, currentVersion); err != nil {
+		cancel()
+		return errors.Wrap(err, "failed to set latest schema version")
 	}
 
 	if err := s.CommitTx(ctx); err != nil {
@@ -854,8 +880,70 @@ func totalDifficultyOptional(ctx context.Context, s *Service) error {
 	if _, err := tx.Exec(ctx, `
 ALTER TABLE t_blocks
 ALTER COLUMN f_total_difficulty
-DROP NOT NULL`); err != nil {
+DROP NOT NULL
+`); err != nil {
 		return errors.Wrap(err, "failed to make f_total_difficulty nullable in t_blocks")
+	}
+
+	return nil
+}
+
+// addRequestsHash adds the f_requests_hash field to t_blocks.
+func addRequestsHash(ctx context.Context, s *Service) error {
+	tx := s.tx(ctx)
+	if tx == nil {
+		return ErrNoTransaction
+	}
+
+	if _, err := tx.Exec(ctx, `
+ALTER TABLE t_blocks
+ADD COLUMN f_requests_hash BYTEA
+`); err != nil {
+		return errors.Wrap(err, "failed to add f_requests_hash to t_blocks")
+	}
+
+	return nil
+}
+
+// addTransactionAuthorizationLists adds the f_requests_hash field to t_blocks.
+func addTransactionAuthorizationLists(ctx context.Context, s *Service) error {
+	tx := s.tx(ctx)
+	if tx == nil {
+		return ErrNoTransaction
+	}
+
+	if _, err := tx.Exec(ctx, `
+CREATE TABLE t_transaction_authorization_lists (
+  f_transaction_hash BYTEA NOT NULL REFERENCES t_transactions(f_hash) ON DELETE CASCADE
+ ,f_block_height     INTEGER NOT NULL
+ ,f_index            INTEGER NOT NULL
+ ,f_chain_id         BYTEA NOT NULL
+ ,f_address          BYTEA NOT NULL
+ ,f_nonce            BIGINT NOT NULL
+ ,f_r                BYTEA NOT NULL
+ ,f_s                BYTEA NOT NULL
+ ,f_y_parity         BOOLEAN NOT NULL
+)
+`); err != nil {
+		return errors.Wrap(err, "failed to create t_transaction_authorization_lists")
+	}
+
+	if _, err := tx.Exec(ctx, `
+CREATE UNIQUE INDEX i_transaction_authorization_lists_1 ON t_transaction_authorization_lists(f_transaction_hash,f_block_height,f_index);
+`); err != nil {
+		return errors.Wrap(err, "failed to create _transaction_authorization_lists_1")
+	}
+
+	if _, err := tx.Exec(ctx, `
+CREATE INDEX i_transaction_authorization_lists_2 ON t_transaction_authorization_lists(f_address);
+`); err != nil {
+		return errors.Wrap(err, "failed to create _transaction_authorization_lists_2")
+	}
+
+	if _, err := tx.Exec(ctx, `
+CREATE INDEX i_transaction_authorization_lists_3 ON t_transaction_authorization_lists(f_block_height);
+`); err != nil {
+		return errors.Wrap(err, "failed to create _transaction_authorization_lists_3")
 	}
 
 	return nil

@@ -148,7 +148,6 @@ linters:
     - err113
     - exhaustive
     - exhaustruct
-    - exportloopref
     - forcetypeassert
     - funlen
     - gci
@@ -164,6 +163,7 @@ linters:
     - nlreturn
     - perfsprint
     - promlinter
+    - tenv
     - varnamelen
     - wrapcheck
     - wsl
