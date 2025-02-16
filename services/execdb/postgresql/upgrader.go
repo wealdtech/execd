@@ -905,7 +905,7 @@ ADD COLUMN f_requests_hash BYTEA
 	return nil
 }
 
-// addTransactionAuthorizationLists adds the f_requests_hash field to t_blocks.
+// addTransactionAuthorizationLists creates the t_transaction_authorization_lists table.
 func addTransactionAuthorizationLists(ctx context.Context, s *Service) error {
 	tx := s.tx(ctx)
 	if tx == nil {
