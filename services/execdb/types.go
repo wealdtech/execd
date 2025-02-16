@@ -50,11 +50,13 @@ type Block struct {
 	Issuance              *big.Int
 	BlobGasUsed           *uint64
 	ExcessBlobGas         *uint64
+	RequestsHash          []byte
 }
 
 // Transaction holds information about a transaction.
 type Transaction struct {
 	AccessList           map[string][][]byte
+	AuthorizationList    []*TransactionAuthorizationListEntry
 	BlockHeight          uint32
 	BlockHash            []byte
 	ContractAddress      *[]byte
@@ -88,6 +90,19 @@ type TransactionAccessListEntry struct {
 	BlockHeight     uint32
 	Address         []byte
 	StorageKeys     [][]byte
+}
+
+// TransactionAuthorizationListEntry holds information about a transaction authorization list.
+type TransactionAuthorizationListEntry struct {
+	TransactionHash []byte
+	BlockHeight     uint32
+	Index           uint32
+	ChainID         []byte
+	Address         []byte
+	Nonce           uint64
+	R               *big.Int
+	S               *big.Int
+	YParity         bool
 }
 
 // TransactionStateDiff holds information about state differences as a result of a transaction.

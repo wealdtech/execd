@@ -1,4 +1,4 @@
-// Copyright © 2021, 2024 Weald Technology Trading.
+// Copyright © 2021 - 2025 Weald Technology Trading.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -154,5 +154,43 @@ SET f_storage_keys = excluded.f_storage_keys
 			return err
 		}
 	}
-	return err
+
+	for _, entry := range transaction.AuthorizationList {
+		_, err = tx.Exec(ctx, `
+INSERT INTO t_transaction_authorization_lists(f_transaction_hash
+                                             ,f_block_height
+                                             ,f_index
+                                             ,f_chain_id
+                                             ,f_address
+                                             ,f_nonce
+                                             ,f_r
+                                             ,f_s
+                                             ,f_y_parity
+                                             )
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+ON CONFLICT (f_transaction_hash,f_block_height,f_index) DO
+UPDATE
+SET f_chain_id = excluded.f_chain_id
+   ,f_address = excluded.f_address
+   ,f_nonce = excluded.f_nonce
+   ,f_r = excluded.f_r
+   ,f_s = excluded.f_s
+   ,f_y_parity = excluded.f_y_parity
+`,
+			transaction.Hash,
+			transaction.BlockHeight,
+			entry.Index,
+			entry.ChainID,
+			entry.Address,
+			entry.Nonce,
+			entry.R,
+			entry.S,
+			entry.YParity,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
