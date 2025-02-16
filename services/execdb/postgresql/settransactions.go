@@ -134,7 +134,7 @@ func (s *Service) SetTransactions(ctx context.Context, transactions []*execdb.Tr
 			key, err := hex.DecodeString(k)
 			if err != nil {
 				// N.B. this should never happen, as we control encoding of the access list.
-				return errors.Wrap(err, "failed to parse access list addredd")
+				return errors.Wrap(err, "failed to parse access list address")
 			}
 			accessLists = append(accessLists, &execdb.TransactionAccessListEntry{
 				TransactionHash: transaction.Hash,
