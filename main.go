@@ -79,7 +79,7 @@ func main2() int {
 	runCommands(ctx)
 
 	logModules()
-	log.Info().Str("version", ReleaseVersion).Msg("Starting execd")
+	log.Info().Str("version", ReleaseVersion).Str("commit_hash", util.CommitHash()).Msg("Starting execd")
 
 	majordomo, err := util.InitMajordomo(ctx)
 	if err != nil {
