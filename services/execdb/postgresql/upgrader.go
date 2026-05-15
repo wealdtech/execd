@@ -25,7 +25,7 @@ type schemaMetadata struct {
 	Version uint64 `json:"version"`
 }
 
-var currentVersion = uint64(11)
+var currentVersion = uint64(12)
 
 type upgrade struct {
 	funcs []func(context.Context, *Service) error
@@ -83,6 +83,11 @@ var upgrades = map[uint64]*upgrade{
 		funcs: []func(context.Context, *Service) error{
 			addRequestsHash,
 			addTransactionAuthorizationLists,
+		},
+	},
+	12: {
+		funcs: []func(context.Context, *Service) error{
+			widenAuthorizationListNonce,
 		},
 	},
 }
@@ -346,7 +351,7 @@ CREATE TABLE t_transaction_authorization_lists (
  ,f_index            INTEGER NOT NULL
  ,f_chain_id         BYTEA NOT NULL
  ,f_address          BYTEA NOT NULL
- ,f_nonce            BIGINT NOT NULL
+ ,f_nonce            NUMERIC(20,0) NOT NULL
  ,f_r                BYTEA NOT NULL
  ,f_s                BYTEA NOT NULL
  ,f_y_parity         BOOLEAN NOT NULL
@@ -944,6 +949,26 @@ CREATE INDEX i_transaction_authorization_lists_2 ON t_transaction_authorization_
 CREATE INDEX i_transaction_authorization_lists_3 ON t_transaction_authorization_lists(f_block_height);
 `); err != nil {
 		return errors.Wrap(err, "failed to create _transaction_authorization_lists_3")
+	}
+
+	return nil
+}
+
+// widenAuthorizationListNonce widens t_transaction_authorization_lists.f_nonce from BIGINT to
+// NUMERIC(20,0) so it can hold the full uint64 range. EIP-7702 authorization entries with an
+// invalid nonce of 2^64-1 appear on chain (the spec rejects them but they still land in blocks),
+// and the signed-int64 column overflowed on encode.
+func widenAuthorizationListNonce(ctx context.Context, s *Service) error {
+	tx := s.tx(ctx)
+	if tx == nil {
+		return ErrNoTransaction
+	}
+
+	if _, err := tx.Exec(ctx, `
+ALTER TABLE t_transaction_authorization_lists
+ALTER COLUMN f_nonce TYPE NUMERIC(20,0)
+`); err != nil {
+		return errors.Wrap(err, "failed to widen f_nonce in t_transaction_authorization_lists")
 	}
 
 	return nil
